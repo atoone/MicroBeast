@@ -5,9 +5,11 @@ An 8-bit Z80 computer kit in a box.
 
 # Introduction
 
-MicroBeast is a kit you can build yourself. This repository provides information about the system, useful code and downloads and the Wiki for technical documentation.
+MicroBeast is a kit you can build yourself. This repository provides information about the system, useful code and downloads.
 
-More details can be found at https://feertech.com/microbeast/
+Visit the Wiki for technical documentation: https://github.com/atoone/MicroBeast/wiki
+
+More details on the project can be found at https://feertech.com/microbeast/
 
 # Specs
 
