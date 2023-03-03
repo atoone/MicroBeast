@@ -1,5 +1,5 @@
 # MicroBeast
-An 8-bit Z80 computer kit in a box.
+A self contained 8-bit Z80 computer kit with a unique 14 segment LED display.
 
 ![microbeast](https://user-images.githubusercontent.com/5371724/222550946-2ff28e32-867d-42ff-b07e-517b6456cc09.jpg)
 
