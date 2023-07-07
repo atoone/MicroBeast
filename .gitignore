@@ -1,0 +1,21 @@
+# Temporary files
+*.000
+*.bak
+*.bck
+*~
+_autosave-*
+*.tmp
+
+# Output
+*.zip
+*.obj
+*.lst
+
+# Visual studio
+*.pdb
+.vs
+Debug
+Backup
+Release
+*.exe
+*.vcxproj*
