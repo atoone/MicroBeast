@@ -633,6 +633,7 @@ _redraw_skip_char   INC     HL
                     JR      Z, _redraw_normal
 
                     SRL     A
+                    SRL     A
                     INC     A
 
 _redraw_normal      CP      (HL)
@@ -1241,7 +1242,7 @@ _flags_and_redraw   OR      CFLAGS_SHOW_MOVED
 _not_ctrl_up        CP      KEY_CTRL_DOWN
                     JR      NZ, _not_ctrl_down
 
-                    LD      A, (console_height)
+_shift_down         LD      A, (console_height)
                     LD      C, A
                     LD      A, (display_row)
                     INC     A
@@ -1275,7 +1276,7 @@ _shift_col          PUSH    AF
                     JR      _shift_complete
 
 _not_ctrl_left      CP      KEY_CTRL_ENTER
-                    JR      NZ, _shift_done
+                    JR      NZ, _not_ctrl_enter
                     LD      A, (cursor_row)
                     DEC     A
                     LD      (display_row), A
@@ -1288,6 +1289,12 @@ _col_ok             LD      (display_col), A
                     LD      A, (console_flags)
                     OR      CFLAGS_TRACK_CURSOR
                     JR      _flags_and_redraw
+
+_not_ctrl_enter     CP      KEY_CTRL_SPACE
+                    JR      NZ, _shift_done
+                    XOR     A
+                    LD      (display_col), A
+                    JR      _shift_down
 
 _shift_done         XOR     A
                     LD      (control_key_pressed),A

@@ -31,7 +31,11 @@
 
                     .org 0h
                     DI                              ; Disable Z80 interrupts
-                    LD      SP, 0h                  ; Set SP
+                    JR      _start
+
+                    .DB     "Firmware 1.0 23/07/18",0,0
+
+_start              LD      SP, 0h                  ; Set SP
 
                     .INCLUDE    "boot_seq.asm"
 
@@ -170,7 +174,7 @@ _wait_loop          IN      A, (C)
                     RET
 
 welcome             .db "************************", 0
-welcome2            .db "* MICRO BEAST  Ver 1_0 *", 0
+welcome2            .db "* MICRO BEAST  Ver 1_1 *", 0
 
 ; =============================================== Font =====================================================
 ;

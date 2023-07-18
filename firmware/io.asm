@@ -55,7 +55,7 @@ _next_key           LD      (keyboard_pos), HL
                     LD      HL, keyboard_state
                     LD      B, _key_state_size
 _check_pressed      CP      (HL)
-                    JP     Z, _do_nothing      ; Key already in state table - nothing to do..
+                    JP      Z, _do_nothing      ; Key already in state table - nothing to do..
                     INC     HL
                     DEC     B
                     JR      NZ, _check_pressed
@@ -73,6 +73,7 @@ _find_free          CP      (HL)
 
 _key_pressed        LD      (HL), C             ; Found free slot, store the raw key code
 
+                    ; Reset repeat counter
                                                 ; Now find the actual character code and add it to the input buffer
                     LD      A, KEY_SHIFT        ; Handle modifier keys
                     CP      C
@@ -87,50 +88,20 @@ _key_pressed        LD      (HL), C             ; Found free slot, store the raw
                     LD      BC, _keyboard_size
                     LD      A, (key_shift_state)
                     AND     A
-                    JR      Z, _get_key
+                    JR      Z, _got_keycode
 _modifier_offset    ADD     HL, BC
                     DEC     A
                     JR      NZ, _modifier_offset
 
-                    LD      A, (HL)             ; Check for special control characters 
-                    LD      C, A
-                    AND     CTRL_KEY_MASK
-                    CP      CTRL_KEY_CHECK
-                    JR      NZ, _get_key
-
-                    LD      A, (HL)             ; Store them in a separate location
-                    LD      (control_key_pressed), A
-                    JR      _do_nothing
-
-                                                ; Write the character to the input buffer
-_get_key            LD      A, (HL)             ; Get the actual character...
-                    AND     A                   ; Skip blank character codes
-                    JR      Z, _do_nothing
-
-                    LD      L, A                ; Store it in L
-
-                    LD      A, (input_size)     ; Now check we have space
-                    CP      _input_buffer_size
-                    JR      Z, _do_nothing
-
-                    INC     A
-                    LD      (input_size), A
-
-                    LD      B, 0
-                    LD      A, (input_free)
-                    LD      C, A
-                    LD      A, L                ; Get the character from L
-                    LD      HL, input_buffer
-                    ADD     HL, BC
-                    LD      (HL), A             ; Store the character
-
-                    INC     C                   ; Point to next byte in input
-                    LD      A, 0Fh
-                    AND     C
-                    LD      (input_free), A
+_got_keycode        LD      A, (HL) 
+                    LD      (last_keycode), A
+                    CALL    _store_key
+                    XOR     A
+                    LD      (key_repeat_time), A
 
                     POP     BC
                     JR      _poll_next
+
 
 _modifier           LD      A, (key_shift_state)
                     OR      B
@@ -156,7 +127,7 @@ _check_released     CP      (HL)
 _handle_release     LD      C, A
                     XOR     A
                     LD      (HL), A             ; Remove it from the buffer 
-
+                    LD      (last_keycode), A
                                                 ; TODO: We should probably tell someone about this...
                     LD      A, KEY_SHIFT        ; Handle modifier keys
                     CP      C
@@ -165,7 +136,11 @@ _handle_release     LD      C, A
                     LD      A, KEY_CTRL
                     CP      C
                     LD      B, KEY_CTRL_BIT
-                    JR      Z, _modifier_up     
+                    JR      NZ, _do_nothing     
+
+_modifier_up        LD      A, (key_shift_state)
+                    XOR     B
+                    LD      (key_shift_state), A
 
 _do_nothing         POP     BC
 
@@ -180,12 +155,58 @@ _poll_next          LD      HL, (keyboard_pos)
                     LD      A, 0FEh
                     CP      B
                     JP      NZ, _poll_loop
-                    RET
 
-_modifier_up        LD      A, (key_shift_state)
-                    XOR     B
-                    LD      (key_shift_state), A
-                    JR      _do_nothing
+                    LD      A, (last_keycode)
+                    AND     A
+                    RET     Z
+                    LD      A, (key_repeat_time)
+                    INC     A
+                    LD      (key_repeat_time), A
+                    CP      KEY_REPEAT_DELAY
+                    JR      Z, _do_repeat
+                    CP      KEY_REPEAT_AFTER
+                    RET     NZ
+                    LD      A, KEY_REPEAT_DELAY
+                    LD      (key_repeat_time),A
+_do_repeat          LD      A, (last_keycode)
+
+
+; Store the decoded keycode in A to the relevant buffer...
+_store_key          LD      C, A
+                    AND     CTRL_KEY_MASK       ; Check for special control characters 
+                    CP      CTRL_KEY_CHECK
+                    JR      NZ, _get_key
+
+                    LD      A, C                ; Store them in a separate location
+                    LD      (control_key_pressed), A
+                    RET
+                                                ; Write the character to the input buffer
+_get_key            LD      A, C                ; Get the actual character...
+                    AND     A                   ; Skip blank character codes
+                    RET     Z
+
+                    LD      L, A                ; Store it in L
+
+                    LD      A, (input_size)     ; Now check we have space
+                    CP      _input_buffer_size
+                    RET     Z
+
+                    INC     A
+                    LD      (input_size), A
+
+                    LD      B, 0
+                    LD      A, (input_free)
+                    LD      C, A
+                    LD      A, L                ; Get the character from L
+                    LD      HL, input_buffer
+                    ADD     HL, BC
+                    LD      (HL), A             ; Store the character
+
+                    INC     C                   ; Point to next byte in input
+                    LD      A, 0Fh
+                    AND     C
+                    LD      (input_free), A
+                    RET
 
 ;
 ; Reads the next available character in A, returning that or 0 if none are available
@@ -309,18 +330,22 @@ KEY_CTRL_DOWN   .EQU    145             ; Can easily be detected
 KEY_CTRL_LEFT   .EQU    146
 KEY_CTRL_RIGHT  .EQU    147
 KEY_CTRL_ENTER  .EQU    148
+KEY_CTRL_SPACE  .EQU    149 
 
 _keyboard_size  .EQU    48
 
 KEY_SHIFT_BIT   .EQU    1
 KEY_CTRL_BIT    .EQU    2
 
+KEY_REPEAT_DELAY .EQU   40
+KEY_REPEAT_AFTER .EQU   KEY_REPEAT_DELAY+7
+
 keyboard        .DB    "vcxz", KEY_SHIFT, 0
                 .DB    "gfdsa", KEY_CTRL
                 .DB    "trewq", KEY_DOWN
                 .DB    "54321", KEY_UP  
                 .DB    "67890", KEY_BACKSPACE
-                .DB    "yuiop;"
+                .DB    "yuiop:"
                 .DB    "hjkl.", KEY_ENTER
                 .DB    "bnm ", KEY_LEFT, KEY_RIGHT
 
@@ -329,7 +354,7 @@ _shifted        .DB     "VCXZ", 0, 0
                 .DB     "TREWQ", 0              ; Shift + down?
                 .DB     "%$", 35, 34, "!", 0    ; Shift + up
                 .DB     "^&*()", 0              ; Shift + delete
-                .DB     "YUIOP:"
+                .DB     "YUIOP;"
                 .DB     "HJKL,", 0              ; Shift + enter
                 .DB     "BNM", 0,0,0            ; Shift left + right
 
@@ -340,7 +365,7 @@ _ctrl           .DB    0,KEY_CTRL_C,KEY_CTRL_X,KEY_CTRL_Z,0,0
                 .DB    0,0,0,0,0,KEY_DELETE
                 .DB    0,KEY_CTRL_U, "+=-", 0
                 .DB    0, "<@>_", KEY_CTRL_ENTER
-                .DB    0, "?/", 0,KEY_CTRL_LEFT,KEY_CTRL_RIGHT
+                .DB    0, "?/", KEY_CTRL_SPACE,KEY_CTRL_LEFT,KEY_CTRL_RIGHT
 
 _shift_ctrl     .DB    0,0,0,0,0,0
                 .DB    0,0,0,0,0,0

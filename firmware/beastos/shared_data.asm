@@ -50,6 +50,8 @@ keyboard_state      .BLOCK  _key_state_size ; state buffer - 8 bytes containing 
 keyboard_pos        .BLOCK  2               ; Internal state
 key_shift_state     .BLOCK  1               ; Holds state of shift and control keys in bits 0 and 1 respectively
 control_key_pressed .BLOCK  1               ; If special control keys are pressed, they are stored here..
+last_keycode        .BLOCK  1               ; The last keycode that was pressed, for repeats..
+key_repeat_time     .BLOCK  1               ; How many poll events since the key state last changed
 
 _input_buffer_size  .EQU    16
 input_buffer        .BLOCK _input_buffer_size          ; 16 byte input buffer. Note wraparound is handled by bitmasks, so don't change this length
