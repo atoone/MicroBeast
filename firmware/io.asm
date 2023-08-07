@@ -340,8 +340,8 @@ KEY_CTRL_BIT    .EQU    2
 KEY_REPEAT_DELAY .EQU   40
 KEY_REPEAT_AFTER .EQU   KEY_REPEAT_DELAY+7
 
-keyboard        .DB    "vcxz", KEY_SHIFT, 0
-                .DB    "gfdsa", KEY_CTRL
+keyboard        .DB    "vcxz", KEY_CTRL, 0
+                .DB    "gfdsa", KEY_SHIFT
                 .DB    "trewq", KEY_DOWN
                 .DB    "54321", KEY_UP  
                 .DB    "67890", KEY_BACKSPACE
