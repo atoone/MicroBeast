@@ -561,7 +561,7 @@ _exec_done          PUSH    AF
                     CALL    hex_out
                     CALL    m_print_inline
                     .DB     ESCAPE_CHAR, "K", 0
-                    JP      bios_conin
+                    CALL    bios_conin ;pause for a key, then return to memory edit at the execution location
 
 
 edit_memory         XOR     A
