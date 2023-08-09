@@ -37,8 +37,8 @@ MONITOR_START       .EQU   0DF00h
                     LD      A, DRIVE_B_PAGE
                     LD      (drive_b_mem_page), A
 
-                    LD     HL, timer_int
-                    LD     (0FDFEh), HL
+                    LD      HL, timer_int
+                    LD      (0FDFEh), HL
 
                     LD      A, 1
                     LD      (timer), A
@@ -1022,7 +1022,7 @@ _pause_loop         PUSH    BC
                     RET
 ;
 ; Detect (and time) interrupt
-; Enter with D containing the mask for which bits of the timer byte we check for zero
+; Enter with A containing the mask for which bits of the timer byte we check for zero
 ; Return when the timer is zero, with BC containing 72 + 48*t-states taken
 ;
 detect_int          LD      BC, 0
