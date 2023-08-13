@@ -307,7 +307,8 @@ _note_table         .DW 6379
                     .DW 10730
                     .DW 11360
                     .DW 12045
-
+                    .DW 0
+                    
 ;
 ; Get the next key press
 ;
