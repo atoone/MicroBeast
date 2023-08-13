@@ -1346,8 +1346,16 @@ _unblink            JP    disp_character
                     .INCLUDE "bios_rtc.asm"
                     .INCLUDE "../flash.asm"
 
+JUMP_TABLE_SIZE     .EQU    2
 
-.IF $ >= BIOS_TOP
+BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
+                    .FILL   BIOS_SPARE, 0
+
+                    JP          wait_for_key        ; Waits for until a key is pressed and released
+                    JP          play_note           ; Plays the note defined by DE (octave, note) and C (duration, tenths)
+
+
+.IF $ > BIOS_TOP
     .ECHO "End of BIOS is too high ("
     .ECHO $
     .ECHO " > "
@@ -1357,11 +1365,11 @@ _unblink            JP    disp_character
 .ENDIF
 
 .ECHO "Bios Size is "
-.ECHO $-BIOS_START
+.ECHO BIOS_TOP-BIOS_START-BIOS_SPARE
 .ECHO ". Limit is "
 .ECHO BIOS_TOP-BIOS_START
 .ECHO ". Spare "
-.ECHO BIOS_TOP-$
+.ECHO BIOS_SPARE
 .ECHO "\n\n"
 
                     .INCLUDE shared_data.asm

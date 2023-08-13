@@ -232,38 +232,81 @@ read_character      LD      A, (input_size)
                     OR      A
                     EI
                     RET
-
+                    
+;;
+; D = Octave 2-6
+; E = Note 0-11
+; C = 1-15 duration, ~tenths of a second
 ;
-; Beep  - Middle C is 261.625Hz = 30578 cycles at 8Mhz - 15289 per half cycle
-; Call with: HL - cycle time ( 0E80h = Middle C )
-;             E - Number of cycles
-;
+play_note           LD      A, 7
+                    SUB     D
+                    LD      D, 0
+                    LD      HL, _note_table
+                    ADD     HL, DE
+                    ADD     HL, DE
 
+                    LD      E, (HL)
+                    INC     HL
+                    LD      D, (HL)
 
-play_tone           IN      A, (AUDIO_PORT)        ; 200 cycles = 2/3 of a sec
-                    LD      D, A
-_beep_loop          LD      A, D
-                    XOR     AUDIO_MASK
-                    OUT     (AUDIO_PORT), A
+_note_octave        AND     A
+                    JR      Z, _note_shifted
 
-                    LD      C, L
-_beep_delay0        LD      B, H
-_beep_delay1        DJNZ    _beep_delay1        ; 13 * (count-2) + 8
-                    DEC     C
-                    JR      NZ, _beep_delay0
+                    SRL     D
+                    RR      E
+                    DEC     A
+                    JR      _note_octave
 
-                    LD      A, D          
-                    OUT     (AUDIO_PORT), A
+_note_shifted       LD      B, C
+                    LD      C, A        ; A is zero from previous octave calc
+                    SLA     B    
+                    SLA     B    
+                    SLA     B    
+                    SLA     B           ; Now BC = 4096 * C
 
-                    LD      C, L
-_beep_delay2        LD      B, H
-_beep_delay3        DJNZ    _beep_delay3        ; 13 * (count-2) + 8
-                    DEC     C
-                    JR      NZ, _beep_delay2      
+                    IN      A, (AUDIO_PORT)
+                    LD      (_tone_val+1), A
+                    DI
 
-                    DEC     E
-                    JR      NZ, _beep_loop
+_tone_loop          ; 186 T-states          
+                    ADD     HL, DE              ; 11
+                    RRA                         ; 4   Carry into bit 7
+                    SRA     A                   ; 8   Copy to bit 6
+                    SRA     A                   ; 8   ..5
+                    SRA     A                   ; 8   ..4
+                    SRA     A                   ; 8   ..3
+
+                    AND     AUDIO_MASK          ; 7
+_tone_val           XOR     0                   ; 7
+                    LD      (_tone_val+1), A    ; 13
+
+                    OUT     (AUDIO_PORT),A      ; 12
+
+                    LD      A, B                ; 4
+                    LD      B, 5                ; 7
+                    DJNZ    $                   ; 4 * 13 + 7 = 59
+                    LD      B, A                ; 4
+
+                    DEC     BC                  ; 6
+                    LD      A, B                ; 4
+                    OR      C                   ; 4
+                    JR      NZ, _tone_loop      ; 12
+
+                    EI
                     RET
+
+_note_table         .DW 6379
+                    .DW 6757
+                    .DW 7158
+                    .DW 7585
+                    .DW 8035
+                    .DW 8512
+                    .DW 9023
+                    .DW 9553
+                    .DW 10124
+                    .DW 10730
+                    .DW 11360
+                    .DW 12045
 
 ;
 ; Get the next key press
@@ -365,7 +408,7 @@ _ctrl           .DB    0,KEY_CTRL_C,KEY_CTRL_X,KEY_CTRL_Z,0,0
                 .DB    0,0,0,0,0,KEY_DELETE
                 .DB    0,KEY_CTRL_U, "+=-", 0
                 .DB    0, "<@>_", KEY_CTRL_ENTER
-                .DB    0, "?/", KEY_CTRL_SPACE,KEY_CTRL_LEFT,KEY_CTRL_RIGHT
+                .DB    "\\?/", KEY_CTRL_SPACE,KEY_CTRL_LEFT,KEY_CTRL_RIGHT
 
 _shift_ctrl     .DB    0,0,0,0,0,0
                 .DB    0,0,0,0,0,0

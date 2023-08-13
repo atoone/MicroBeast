@@ -229,12 +229,12 @@ panic               CALL    uart_inline
                     CALL    uart_hex
                     LD      A, L
                     CALL    uart_hex
-_beep               LD      HL, 0E80h
-                    LD      E, 100
-                    CALL    play_tone
-                    LD      HL, 07C0h
-                    LD      E, 200
-                    CALL    play_tone
+_beep               LD      DE, 0400h
+                    LD      C, 5
+                    CALL    play_note
+                    LD      DE, 0506h
+                    LD      C, 5
+                    CALL    play_note
                     JR      _beep
 
 _continue           CALL    init_portb
