@@ -40,7 +40,30 @@ _init_loop          LD      (HL),A
 
 ; Poll the keyboard, adding raw codes to the keyboard_state buffer, and decoded characters to the input_buffer
 ;
-keyboard_poll       LD      BC, 0FE00h          ; Keyboard row 0
+keyboard_poll       LD      BC, 0FD00h          ; Check shift key
+                    LD      A, (key_shift_state)
+                    AND     ~(KEY_SHIFT_BIT | KEY_CTRL_BIT)
+                    LD      D, A
+
+                    IN      A, (C)
+                    AND     020h
+                    JR      NZ, _check_ctrl_key
+                    LD      A, KEY_SHIFT_BIT
+                    OR      D
+                    LD      D, A
+
+_check_ctrl_key     LD      BC, 0FE00h          ; Keyboard row 0
+                    IN      A, (C)
+                    AND     010h
+                    JR      NZ, _store_modifiers
+                    LD      A, KEY_CTRL_BIT
+                    OR      D
+                    LD      D, A
+
+_store_modifiers    LD      A, D
+                    LD      (key_shift_state), A
+
+
                     LD      HL, keyboard
 _poll_loop          IN      A, (C)              ; BC -> Keyboard row port..
                     LD      D, 1                ; D -> Current Bit
@@ -73,16 +96,7 @@ _find_free          CP      (HL)
 
 _key_pressed        LD      (HL), C             ; Found free slot, store the raw key code
 
-                    ; Reset repeat counter
-                                                ; Now find the actual character code and add it to the input buffer
-                    LD      A, KEY_SHIFT        ; Handle modifier keys
-                    CP      C
-                    LD      B, KEY_SHIFT_BIT
-                    JR      Z, _modifier
-                    LD      A, KEY_CTRL
-                    CP      C
-                    LD      B, KEY_CTRL_BIT
-                    JR      Z, _modifier         
+                    ; Reset repeat counter       
 
                     LD      HL, (keyboard_pos)  ; Get the current keyboard character location
                     LD      BC, _keyboard_size
@@ -101,12 +115,6 @@ _got_keycode        LD      A, (HL)
 
                     POP     BC
                     JR      _poll_next
-
-
-_modifier           LD      A, (key_shift_state)
-                    OR      B
-                    LD      (key_shift_state), A
-                    JR      _do_nothing
 
                                                 ; Key is not pressed... remove it from the state buffer if it was pressed (key up event)
                                                 ; TODO: This is rather inefficient...
@@ -129,19 +137,6 @@ _handle_release     LD      C, A
                     LD      (HL), A             ; Remove it from the buffer 
                     LD      (last_keycode), A
                                                 ; TODO: We should probably tell someone about this...
-                    LD      A, KEY_SHIFT        ; Handle modifier keys
-                    CP      C
-                    LD      B, KEY_SHIFT_BIT
-                    JR      Z, _modifier_up
-                    LD      A, KEY_CTRL
-                    CP      C
-                    LD      B, KEY_CTRL_BIT
-                    JR      NZ, _do_nothing     
-
-_modifier_up        LD      A, (key_shift_state)
-                    XOR     B
-                    LD      (key_shift_state), A
-
 _do_nothing         POP     BC
 
 _poll_next          LD      HL, (keyboard_pos)
@@ -308,7 +303,7 @@ _note_table         .DW 6379
                     .DW 11360
                     .DW 12045
                     .DW 0
-                    
+
 ;
 ; Get the next key press
 ;
@@ -384,8 +379,8 @@ KEY_CTRL_BIT    .EQU    2
 KEY_REPEAT_DELAY .EQU   40
 KEY_REPEAT_AFTER .EQU   KEY_REPEAT_DELAY+7
 
-keyboard        .DB    "vcxz", KEY_CTRL, 0
-                .DB    "gfdsa", KEY_SHIFT
+keyboard        .DB    "vcxz", 0, 0
+                .DB    "gfdsa", 0
                 .DB    "trewq", KEY_DOWN
                 .DB    "54321", KEY_UP  
                 .DB    "67890", KEY_BACKSPACE
@@ -405,8 +400,8 @@ _shifted        .DB     "VCXZ", 0, 0
 _ctrl           .DB    0,KEY_CTRL_C,KEY_CTRL_X,KEY_CTRL_Z,0,0
                 .DB    0,0,0,KEY_CTRL_S,0,0
                 .DB    0,KEY_CTRL_R,KEY_CTRL_E,0,0,KEY_CTRL_DOWN
-                .DB    0,0,0,0,0,KEY_CTRL_UP
-                .DB    0,0,0,0,0,KEY_DELETE
+                .DB    0,0,0,27h,7Ch,KEY_CTRL_UP ; Vertical bar, single quote
+                .DB    "{}`[]",KEY_DELETE
                 .DB    0,KEY_CTRL_U, "+=-", 0
                 .DB    0, "<@>_", KEY_CTRL_ENTER
                 .DB    "\\?/", KEY_CTRL_SPACE,KEY_CTRL_LEFT,KEY_CTRL_RIGHT

@@ -214,10 +214,51 @@ _uart_ready5
 
                     JP      NZ, _boot_beep
 
+                    CALL    uart_init               ; Reinitialise the UART to make sure we've not missed anything
+;
+; Now check keys all read as un-pressed, apart from DELETE
+;
+                    XOR     A                       ; Reset boot mode
+                    LD      (boot_mode), A
+
+                    LD      BC, 0F700h
+_key_loop           IN      A, (C)
+                    AND     03Fh
+                    CP      03Fh
+                    JP      Z, _key_ok
+
+                    LD      L, A
+                    LD      A, B
+                    CP      0EFh
+                    JP      Z, _delete_row
+
+                    LD      H,B                 ; If it's not the delete row, the panic code is the row and key mask
+                    JP      panic
+
+_delete_row         LD      A, L
+                    CP      01Fh                ; If it is the delete row and not the delete key, panic 0004
+                    LD      HL, PANIC_0004
+                    JP      NZ, panic
+
+                    LD      A, 0FFh
+                    LD      (boot_mode), A
+
+                    CALL    uart_inline
+                    .DB     "Memory test\r\n", 0
+
+                    CALL    mem_test_start
+
+_key_ok             RRC     B
+                    LD      A, B
+                    CP      0F7h
+                    JP      NZ, _key_loop
+
+                    CALL    uart_inline
+                    .DB     "Keyboard OK\r\n", 0
+
 ;
 ; At this stage we should have a working UART and memory.. we can start calling routines..
 ;
-                    CALL    uart_init               ; Reinitialise the UART to make sure we've not missed anything
                     CALL    uart_inline
                     .DB     "MicroBeast starting...\n\r",0
 
@@ -291,44 +332,5 @@ _continue           CALL    init_portb
 
                     CALL    uart_inline
                     .DB     "Detected RTC\r\n", 0
-
-;
-; Now check keys all read as un-pressed, apart from DELETE
-;
-                    XOR     A                       ; Reset boot mode
-                    LD      (boot_mode), A
-
-                    LD      BC, 0F700h
-_key_loop           IN      A, (C)
-                    AND     03Fh
-                    CP      03Fh
-                    JP      Z, _key_ok
-
-                    LD      L, A
-                    LD      A, B
-                    CP      0EFh
-                    JP      Z, _delete_row
-
-                    LD      H,B                 ; If it's not the delete row, the panic code is the row and key mask
-                    JP      panic
-
-_delete_row         LD      A, L
-                    CP      01Fh                ; If it is the delete row and not the delete key, panic 0004
-                    LD      HL, PANIC_0004
-                    JP      NZ, panic
-
-                    LD      A, 0FFh
-                    LD      (boot_mode), A
-
-                    CALL    uart_inline
-                    .DB     "ALT Boot\r\n", 0
-
-_key_ok             RRC     B
-                    LD      A, B
-                    CP      0F7h
-                    JP      NZ, _key_loop
-
-                    CALL    uart_inline
-                    .DB     "Keyboard OK\r\n", 0
 
                     .MODULE main
