@@ -67,17 +67,32 @@ one page of memory (16K), as each of the 64 rows occupies 256 bytes. It is treat
 addressing is simple (row is high byte of address, column x 2 is low byte), and scrolling of the virtual console can be achieved by adjusting the offset of
 the virtual console within the screen buffer.
 
-The console is controlled by the IOByte, allowing input and output to be selected using the standard CP/M `STAT` command. Note that the `TTY` and `CRT` options
-for the console device only control the input source - any output will be directed to *both* the built in display *and* the UART serial device. To send output
+The console is controlled by the IOByte, allowing input and output to be selected using the standard CP/M `STAT` command. To view the current IOByte 
+configuration use `STAT DEV:` which will display something like:
+
+```
+CON: is CRT:
+RDR: is TTY:
+PUN: is TTY:
+LST: is TTY:
+```
+
+This shows which devices are allocated to the `CON` (Console - normal input and output), `RDR` Reader device, `PUN` Punched card input and output for the `LST` list device.
+
+
+Note that the `TTY` and `CRT` options for the console device only control the input source - any output will be directed to *both* the built in display *and* the UART serial device. To send output
 to a single destination, use the `BAT` option, which specifies that the input is determined by the `RDR` Reader device, and ouput by the `LST` list device.
 
+The `STAT` command can be used to change the IOByte configuration. For instance, to switch input to be from Serial (TTY) and output to be display + serial, us `STAT CON:=TTY:`.
 
+The IOByte is a single byte at address `03h` in RAM, with the following bitmap.
+```
   +-----+-----+-----+-----+-----+-----+-----+-----+
   |  7  |  6  |  5  |  4  |  3  |  2  |  1  |  0  |
   +-----+-----+-----+-----+-----+-----+-----+-----+
   |    LST    |    PUN    |    RDR    |    CON    |
   +-----+-----+-----+-----+-----+-----+-----+-----+
-  
+```  
 
   
     Con:
@@ -101,16 +116,6 @@ to a single destination, use the `BAT` option, which specifies that the input is
         10 LPT - Unused
         11 UL1 - Reserved for Phase 2
 
-To view the current IOByte configuration use `STAT DEV:` which will display something like:
-
-```
-CON: is CRT:
-RDR: is TTY:
-PUN: is TTY:
-LST: is TTY:
-```
-
-The `STAT` command can also be used to change the IOByte configuration. For instance, to switch input to be from Serial (TTY) and output to be display + serial, us `STAT CON:=TTY:`.
 
 ## Escape Codes
 
@@ -119,6 +124,9 @@ The console supports the following escape character sequences:
 | Characters   | Description                                         |
 |--------------|-----------------------------------------------------|
 |  `ESC` `K`   | Clear to end of line                                |
+
+
+(This section is incomplete - more will be added soon)
 
 
 ## Disk Handling
