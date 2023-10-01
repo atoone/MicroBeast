@@ -108,7 +108,7 @@ font
                     .dw     1000h   ; i
                     .dw     2210h   ; j
                     .dw     1e00h   ; k
-                    .dw     0030h   ; l
+                    .dw     1200h   ; l
                     .dw     10d4h   ; m
                     .dw     1050h   ; n
                     .dw     00dch   ; o

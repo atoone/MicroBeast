@@ -60,12 +60,35 @@ i2c_start           CALL    i2c_sda_high
                     CALL    i2c_sda_low     ; Drive data low
                     JP      i2c_scl_low     ; Drive clock low
 
+
+;
+; Read a byte from Device address H, Register L into A
+; Calls i2c_start, sets address, reads byte and then calls i2c_stop
+; Returns With Carry SET and A containing the register value, or Carry CLEAR if no acknowledge
+; Uses A, B, C, D, H, L
+; Preserves H, L
+i2c_read_byte       CALL    i2c_read_from
+                    ; Fall through into stop
+                
 ;
 ; Uses A
 i2c_stop            CALL    i2c_sda_low     ; Drive data low
                     CALL    i2c_scl_high
                     JP      i2c_sda_high
 
+; Write a byte in C to Device address H, register L
+; Returns with Carry SET if OK, CLEAR if no acknowledgement
+; Calls i2c_stop when done..
+;
+; Preserves H, L
+i2c_write_byte      PUSH    BC
+                    CALL    i2c_write_to
+                    POP     BC
+                    JP      NC, i2c_stop
+                    LD      A, C
+                    CALL    i2c_write
+                    JR      i2c_stop
+                    
 ;
 ; Read a byte from Device address H, Register L
 ; Calls i2c_start, but does NOT call i2c_stop
@@ -88,6 +111,7 @@ _read_pause         DJNZ    _read_pause
                     CALL    i2c_read
                     SCF
 _read_end           RET
+
 
 ;
 ; Prepare to write to Device address H, Register L
@@ -208,15 +232,6 @@ _fast_loop          LD      A, H
                     POP     HL
                     LD      D, A
                     RET
-
-; Cycle SCL, returning SDA,SCL in D
-;
-; Uses A, D
-i2c_scl_cycle2      CALL    i2c_scl_low
-                    CALL    i2c_scl_high
-                    IN      A, (PIO_B_DATA)
-                    LD      D, A
-                    ; Fall into scl_low...
 
 ; SCL/SDA toggle routines
 ;

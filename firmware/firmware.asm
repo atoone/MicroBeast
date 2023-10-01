@@ -33,7 +33,7 @@
                     DI                              ; Disable Z80 interrupts
                     JR      _start
 
-                    .DB     "Firmware 1.3 23/08/24",0,0
+                    .DB     "Firmware 1.4 01/10/23",0,0
 
 _start              LD      SP, 0h                  ; Set SP
 
@@ -174,7 +174,7 @@ _wait_loop          IN      A, (C)
                     RET
 
 welcome             .db "************************", 0
-welcome2            .db "* MICRO BEAST  Ver 1_3 *", 0
+welcome2            .db "* MICRO BEAST  Ver 1_4 *", 0
 
 ; =============================================== Font =====================================================
 ;

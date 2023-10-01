@@ -701,6 +701,12 @@ _redraw_not_row     LD      B, MOVE_BELOW_BITMAP_H
 _redraw_not_above   LD      B, MOVE_ABOVE_BITMAP_H
 
 _redraw_map         ADD     HL, BC
+                    LD      A, (display_col)
+                    AND     A
+                    JR      NZ, _redraw_map2
+                    LD      A, MOVE_AT_LEFT_BITMAP
+                    OR      L
+                    LD      L, A
 _redraw_map2        LD      A, DISPLAY_WIDTH-1
                     CALL    disp_bitmask
 
@@ -720,6 +726,7 @@ MOVE_BOTTOM_BITMAP  .EQU    0008h
 MOVE_ROW_BITMAP_L   .EQU    0c0h
 MOVE_ABOVE_BITMAP_H .EQU    05h
 MOVE_BELOW_BITMAP_H .EQU    28h
+MOVE_AT_LEFT_BITMAP .EQU    030h
 
 ;---------------------------------------- Simple character output.. 
 _conout_character   LD      DE, (cursor_row)
@@ -1213,7 +1220,7 @@ _int_done           EXX
                     POP     AF
                     LD      SP, (intr_stack)
                     EI
-                    RETI
+_do_reti            RETI
 
 ; Enter with A containing a special control character
 ;
@@ -1292,6 +1299,7 @@ _col_ok             LD      (display_col), A
 
 _not_ctrl_enter     CP      KEY_CTRL_SPACE
                     JR      NZ, _shift_done
+
                     XOR     A
                     LD      (display_col), A
                     JR      _shift_down
@@ -1346,11 +1354,15 @@ _unblink            JP    disp_character
                     .INCLUDE "bios_rtc.asm"
                     .INCLUDE "../flash.asm"
 
-JUMP_TABLE_SIZE     .EQU    2
+JUMP_TABLE_SIZE     .EQU    6
 
 BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
                     .FILL   BIOS_SPARE, 0
 
+                    JP          i2c_start
+                    JP          i2c_stop
+                    JP          i2c_write_to
+                    JP          i2c_read_from
                     JP          wait_for_key        ; Waits for until a key is pressed and released
                     JP          play_note           ; Plays the note defined by DE (octave, note) and C (duration, tenths)
 

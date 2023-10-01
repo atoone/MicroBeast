@@ -37,7 +37,7 @@ MONITOR_START       .EQU   0DF00h
                     LD      A, DRIVE_B_PAGE
                     LD      (drive_b_mem_page), A
 
-                    LD      HL, timer_int
+_clock_check        LD      HL, timer_int
                     LD      (0FDFEh), HL
 
                     LD      A, 1
@@ -50,8 +50,10 @@ MONITOR_START       .EQU   0DF00h
                     JR      NZ, _clock_detected
 
 _no_clock           CALL    m_print_inline
-                    .DB     "No interrupt", 0
-                    JP      $
+                    .DB     ".", 0
+
+                    CALL    _do_reti
+                    JR      _clock_check
 
 _clock_detected     LD      A, 7
                     CALL    detect_int
@@ -114,7 +116,7 @@ _speed_value        .DB     " 0,0Mhz", 0
                     CALL    pause_for_ticks
 
                     CALL    m_print_inline
-                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.3", 0
+                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.4", 0
 
                     LD      BC, 60h
                     CALL    pause_for_ticks

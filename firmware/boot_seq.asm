@@ -29,7 +29,9 @@
 ; TODO: PIO setup should happen after the initial beep. Do it here for now, until new boards are available.
 ;
                     LD      A, PIO_SET_INTERRUPT    ; Ports A/B Interrupt control - no interrupts
+                    OUT     (PIO_A_CTRL), A         ; Set control twice in case a reset interrupted a control sequence
                     OUT     (PIO_A_CTRL), A
+                    OUT     (PIO_B_CTRL), A
                     OUT     (PIO_B_CTRL), A
 
                     LD      A, PIO_MODE_3           ; Port A Mode 3 
