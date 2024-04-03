@@ -319,7 +319,7 @@ _conout_disp        LD      A, (console_escape)             ; Test to see if han
 
                     LD      A, (console_flags)              ; Test to see if we're expecting an escape character
                     AND     CFLAGS_ESCAPE
-                    JR      Z, _conout_check_esc
+                    JP      Z, _conout_check_esc
 
                                                             ; If so, this is the first character after we got an escape...
                     LD      DE, (cursor_row)                ; Get cursor position in DE
@@ -370,19 +370,31 @@ _conout_not_home    CP      'I'                         ; Reverse line feed. Ins
                     CP      'J'
                     JR      NZ, _conout_not_clr_sc
 
-                    ; TODO... Clear to end of screen
-                    RET
+                    CALL    _conout_clr_ln
+                    LD      BC, (cursor_row)
+                    LD      C, 0
+_conout_clr_scrn    INC     B
+                    LD      A, (console_height)
+                    CP      B
+                    JP      Z, _redraw_buffer
+                    PUSH    BC
+                    LD      A, B
+                    CALL    clear_screen_row
+                    POP     BC
+                    JR      _conout_clr_scrn
 
 _conout_not_clr_sc  CP      'K'
                     JR      NZ, _conout_not_clr_ln
 
-                    LD      BC, (cursor_row)
+                    CALL   _conout_clr_ln
+                    JP     _redraw_buffer
+
+_conout_clr_ln      LD      BC, (cursor_row)
                     DEC     B
                     LD      A, C
                     DEC     A
                     LD      C, B
-                    CALL   clear_screen_row
-                    JP     _redraw_buffer
+                    JP      clear_screen_row
 
 _conout_not_clr_ln  CP      'Y'
                     JR      NZ, _conout_not_pos
@@ -714,7 +726,7 @@ _redraw_map2        LD      A, DISPLAY_WIDTH-1
                     LD      C, DISP_DEFAULT_BRIGHTNESS
                     CALL    disp_char_bright
 
-_redraw_done        LD      A, RAM_PAGE_1
+_redraw_done        LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
                     RET
 
@@ -769,7 +781,7 @@ _conout_visible     LD      DE, (cursor_row)
                     LD      A, (console_colour)
                     INC     HL
                     LD      (HL), A
-                    LD      A, RAM_PAGE_1
+                    LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
 
                     LD      DE, (cursor_row)
@@ -812,9 +824,11 @@ _clear_loop         LD      (HL), A
                     INC     L
                     LD      (HL), C
                     INC     L
+                    LD      A, 0FEh
+                    CP      L
                     JR      NZ, _clear_loop
 
-                    LD      A, RAM_PAGE_1
+                    LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
                     RET
 ;------------------------------------------------------  
@@ -908,9 +922,9 @@ _read_next          LDI
                     LD      A, B
                     JR      _read_page
 
-_read_write_done    LD      A, RAM_PAGE_1   ; Return page map to normal
+_read_write_done    LD      A, (page_1_mapping)   ; Return page map to normal
                     OUT     (IO_MEM_1), A
-                    LD      A, RAM_PAGE_2
+                    LD      A, (page_2_mapping)
                     OUT     (IO_MEM_2), A
                     EI
                     XOR     A               ; No errors
@@ -1049,10 +1063,13 @@ m_print_a_safe      PUSH    HL
 configure_hardware  DI     
                     LD      A, RAM_PAGE_0
                     OUT     (IO_MEM_0), A       ; Page 0 is RAM 0 
+                    LD      (page_0_mapping), A
                     INC     A
                     OUT     (IO_MEM_1), A       ; Page 1 is RAM 1
+                    LD      (page_1_mapping), A
                     INC      A
                     OUT     (IO_MEM_2), A       ; Page 2 is RAM 2 
+                    LD      (page_2_mapping), A
 
                     LD      HL, 0FE00h          ; Set up the IM 2 table
                     LD      B, 0
@@ -1152,12 +1169,12 @@ setup_screen        LD      DE, screen_page     ; Copy the startup defaults to t
                     LD      A, (console_colour)
                     LD      B, A
                     LD      (PAGE_1_START), BC
-                    LD      BC, 16382
+                    LD      BC, 16378           ; Don't over write last couple of bytes (VideoBeast)
                     LDIR
 
                     CALL    disp_clear          ; Clear the LED screen
 
-restore_page_return LD      A, RAM_PAGE_1       ; Return Page 1 to normal RAM
+restore_page_return LD      A, (page_1_mapping)       ; Return Page 1 to normal RAM
                     OUT     (IO_MEM_1), A
                     RET
 
@@ -1354,17 +1371,57 @@ _unblink            JP    disp_character
                     .INCLUDE "bios_rtc.asm"
                     .INCLUDE "../flash.asm"
 
-JUMP_TABLE_SIZE     .EQU    6
+;
+;
+; Page mapping - since the BIOS uses other pages to manage disk and screen, it must also manage the expected page for the user 
+; programs, to prevent them from being unexpectedly changed (eg. after interrupts).
+;
+
+; Set the User page mapping. Sets page A (0-2) to the physical (RAM/ROM) page in E
+; Returns with carry SET if successful. The given logical page will now point to the physical page in RAM or ROM
+;
+set_page_mapping    CP      3
+                    RET     NC
+                    LD      C, A
+                    LD      B, 0
+                    LD      HL, page_0_mapping
+                    ADD     HL, BC
+                    LD      (HL), E 
+
+                    ADD     A, IO_MEM_0             ; NOTE: Order is important here. Interrupts may occur after the page is stored (above)
+                    LD      C, A                    ; This may result in the page being prematurely mapped, but that's OK.
+                    OUT     (C), E                  ; If we tried to set the page before storing the new default we'd have to disable interrupts
+                    SCF                             ; To avoid a race condition
+                    RET
+
+get_version         LD      A, 016h
+                    RET
+
+JUMP_TABLE_SIZE     .EQU    11
+
+.IF $ > (BIOS_TOP - (3*JUMP_TABLE_SIZE))
+    .ECHO "BIOS No room for Jump Table ("
+    .ECHO $
+    .ECHO " > "
+    .ECHO (BIOS_TOP-(3*JUMP_TABLE_SIZE))
+    .ECHO ") \n\n"
+    .STOP
+.ENDIF
 
 BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
                     .FILL   BIOS_SPARE, 0
 
-                    JP          i2c_start
-                    JP          i2c_stop
-                    JP          i2c_write_to
-                    JP          i2c_read_from
-                    JP          wait_for_key        ; Waits for until a key is pressed and released
-                    JP          play_note           ; Plays the note defined by DE (octave, note) and C (duration, tenths)
+                    JP          m_print_inline      ; 11 (0FDDCh) - Print the characters following the call instruction
+                    JP          set_page_mapping    ; 10 (0FDDFh) - Set the logical (cpu) page in A (0-2) to the physical (RAM/ROM) page in E
+                    JP          i2c_start           ; 9  (0FDE2h) - Sends I2C start sequence
+                    JP          i2c_stop            ; 8  (0FDE5h) - Sends I2C stop sequence
+                    JP          i2c_write           ; 7  (0FDE8h) - Write A as a byte to i2c bus. Carry SET if success. i2c_stop is not called.
+                    JP          i2c_read            ; 6  (0FDEBh) - Read byte from i2C into A, without ACK
+                    JP          i2c_write_to        ; 5  (0FDEEh) - Prepare to write to Device address H, Register L. Carry SET if success. i2c_stop is not called.
+                    JP          i2c_read_from       ; 4  (0FDF1h) - Read a byte int A from Device address H, Register L. Carry SET if success. i2c_stop is not called.
+                    JP          wait_for_key        ; 3  (0FDF4h) - Waits for until a key is pressed and released
+                    JP          play_note           ; 2  (0FDF7h) - Plays the note defined by DE (octave, note) and C (duration, tenths)
+                    JP          get_version         ; 1  (0FDFAh) - Returns the Bios version in A
 
 
 .IF $ > BIOS_TOP

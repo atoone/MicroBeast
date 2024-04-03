@@ -116,7 +116,7 @@ _speed_value        .DB     " 0,0Mhz", 0
                     CALL    pause_for_ticks
 
                     CALL    m_print_inline
-                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.4", 0
+                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.6", 0
 
                     LD      BC, 60h
                     CALL    pause_for_ticks

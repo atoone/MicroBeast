@@ -124,7 +124,14 @@ The console supports the following escape character sequences:
 | Characters   | Description                                         |
 |--------------|-----------------------------------------------------|
 |  `ESC` `K`   | Clear to end of line                                |
-
+|  `ESC` `J`   | Clear to end of screen
+|  `ESC` `A`   | Cursor up one line                                  |
+|  `ESC` `B`   | Cursor down one line                                |
+|  `ESC` `C`   | Cursor right one character                          |
+|  `ESC` `D`   | Cursor left one character                           |
+|  `ESC` `Y`   | Set cursor position, next two chars are X and Y + 32 |
+|  `ESC` `b`   | Set foreground (ink) colour. Next char is colour + 31 |
+ 
 
 (This section is incomplete - more will be added soon)
 

@@ -95,8 +95,12 @@ SHOW_MOVE_DELAY     .EQU    60              ; How long to show the display has b
 
 ;------------------------------- BIOS customisation  ------------------------------------------------
 
-drive_a_mem_page    .BLOCK  1
-drive_b_mem_page    .BLOCK  1
+drive_a_mem_page    .BLOCK  1               ; First page in RAM/ROM for the Drive A image
+drive_b_mem_page    .BLOCK  1               ; First page in RAM/ROM for the Drive B image
+
+page_0_mapping      .BLOCK  1               ; Stores the user mapping for these pages, so they can be correctly restored after interrupts
+page_1_mapping      .BLOCK  1
+page_2_mapping      .BLOCK  1
 
 ;------------------------------- BDOS variables ------------------------------------------------
 ; *** TRACK AND SECTOR MUST BE IN THIS ORDER - READ BY _get_memdisc_addr ***
@@ -109,7 +113,7 @@ sys_seldsk          .BLOCK  1               ; Byte, current selected disk drive 
 sys_alv0            .BLOCK  32              ; 32 bytes, allocation vector 0 (max 255 blocks)
 sys_alv1            .BLOCK  32              ; 32 bytes, allocation vector 1 (max 255 blocks)
 
-display_buffer      .BLOCK  24*2            ; 26 byte scratch area used for composing display output (eg. rtc time display etc.)
+display_buffer      .BLOCK  24*2            ; 48 byte scratch area used for composing display output (eg. rtc time display etc.)
 
 intr_stackarea      .BLOCK  32              ; Interrupt handler stack
 intr_stack          .BLOCK  2

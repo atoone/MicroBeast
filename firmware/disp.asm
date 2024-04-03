@@ -224,33 +224,17 @@ disp_inline         EX      (SP), HL
 ; Note string should be zero terminated...
 ; Returns with HL pointing to the 0 terminator
 ;
-disp_string         LD      E, A
+disp_string         LD      C, A
                     LD      A, (HL)
                     OR      A
                     JP      NZ, _char_ok
                     RET
 
-_char_ok            SUB     32
-                    JP      P, _char_ok2
-                    LD      HL, INVALID_CHAR_BITMASK
-                    JR      _show_char
-
-_char_ok2           LD      B, 0
-                    LD      C, A
-                    PUSH    HL
-                    LD      HL, font
-                    SLA     C
-                    RL      B
-                    ADD     HL, BC
-                    LD      C, (HL)
-                    INC     HL
-                    LD      H, (HL)
-                    LD      L, C
-_show_char          LD      A, E
-                    CALL    disp_bitmask
+_char_ok            PUSH    HL
+                    CALL    disp_character
                     POP     HL
                     INC     HL
-                    JP      disp_string
+                    JR      disp_string
 
 ; Clear the display
 ;
