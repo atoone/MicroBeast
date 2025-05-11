@@ -1515,6 +1515,11 @@ _unblink            JP    disp_character
 ; programs, to prevent them from being unexpectedly changed (eg. after interrupts).
 ;
 
+;
+;
+; Page mapping - since the BIOS uses other pages to manage disk and screen, it must also manage the expected page for the user 
+; programs, to prevent them from being unexpectedly changed (eg. after interrupts).
+;
 ; Get the User page mapping. Sets A to the physical (RAM/ROM) page selelcted for logical page C (0-2)
 ; Returns 0FFh for invalid page values
 get_page_mapping    LD      A, C
@@ -1524,11 +1529,16 @@ get_page_mapping    LD      A, C
                     LD      A, (HL)
                     RET
 
+
 ; Set the User page mapping. Sets page A (0-2) to the physical (RAM/ROM) page in E
 ; Returns with carry SET if successful. The given logical page will now point to the physical page in RAM or ROM
 ;
 set_page_mapping    CALL    _mapping_address
                     RET     NC
+                    LD      C, A
+                    LD      B, 0
+                    LD      HL, page_0_mapping
+                    ADD     HL, BC
                     LD      (HL), E 
 
                     ADD     A, IO_MEM_0             ; NOTE: Order is important here. Interrupts may occur after the page is stored (above)
@@ -1613,6 +1623,7 @@ JUMP_TABLE_SIZE     .EQU    18
 
 BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
                     .FILL   BIOS_SPARE, 0
+
 
                     JP          set_usr_interrupt   ; 18 (0FDC7h) - Set the User interrupt vector. HL = 0 to clear, or address of user routine. HL= 0FFFFh to query.
                     JP          bios_flash_write    ; 17 (0FDCAh) - Erase and write flash data. Data is written to 4K sectors, which are erased before writing.

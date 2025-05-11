@@ -6,6 +6,7 @@
 ; For BIOS version 1.6+
 ;
 
+<<<<<<< HEAD
 ;
 ; CP/M BDOS 2.2 call vectors. CALL BDOS with C set to one of the following values
 ;  Reference: http://www.gaby.de/cpm/manuals/archive/cpm22htm/ch5.htm
@@ -87,6 +88,30 @@ BIOS_SECTOR_TRANSLATE   .EQU    BIOS_START+030h  ; Sector translate
 ;
 ; CALL MBB_GET_VERSION - Get the current BIOS version
 ;   Returns: A = Major, minor version in upper, lower nibble. e.g. 016h = version 1.6
+=======
+
+CPM_BOOT                .EQU    0EE00h
+CPM_WBOOT               .EQU    0EE03h
+CPM_CONIST              .EQU    0EE06h  ; Console status - Return A = 0FFH if character ready, 00H if not
+CPM_CONIN               .EQU    0EE09h  ; Console input  - Wait for input, returning character in A
+CPM_CONOUT              .EQU    0EE0Ch  ; Console OUTput - Write character in C to console
+CPM_LIST                .EQU    0EE0Fh  ; List device OUTput
+CPM_PUNCH_OUT           .EQU    0EE12h  ; Punch card device OUTput
+CPM_READ_IN             .EQU    0EE15h  ; Card Reader input
+CPM_DSK_HOME            .EQU    0EE18h  ; Home disk
+CPM_DSK_SELECT          .EQU    0EE1Bh  ; Select disk
+CPM_DSK_TRACK           .EQU    0EE1Eh  ; Select track
+CPM_DSK_SECTOR          .EQU    0EE21h  ; Select sector
+CPM_DSK_DMA             .EQU    0EE24h  ; Set DMA ADDress
+CPM_DSK_READ            .EQU    0EE27h  ; Read 128 bytes
+CPM_DSK_WRITE           .EQU    0EE2Ah  ; Write 128 bytes
+CPM_LIST_STATUS         .EQU    0EE2Dh  ; List status
+CPM_SECTOR_TRANSLATE    .EQU    0EE30h  ; Sector translate
+
+;
+; CALL MBB_GET_VERSION - Get the current BIOS version
+;   Returns: A = Major, minor version in upper, lower nibble.
+>>>>>>> afcd270e79bde6591b74ba73f97613370d7e9765
 ;
 MBB_GET_VERSION         .EQU    0FDFAh
 
@@ -243,3 +268,4 @@ MBB_FLASH_WRITE         .EQU    0FDCAh
 ;       The address of the current user interrupt routine, or zero if none is configured.
 ;
 MBB_SET_USR_INT         .EQU    0FDC7h
+
