@@ -96,7 +96,6 @@ SHOW_MOVE_DELAY     .EQU    60              ; How long to show the display has b
 
 ;------------------------------- BIOS customisation  ------------------------------------------------
 
-
 drive_a_mem_page    .BLOCK  1               ; First page in RAM/ROM for the Drive A image  - NOTE: These values must be in order of drive number
 drive_b_mem_page    .BLOCK  1               ; First page in RAM/ROM for the Drive B image
 
