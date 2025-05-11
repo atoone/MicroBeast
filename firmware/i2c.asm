@@ -142,7 +142,53 @@ i2c_address_w       SLA     A
 ; Returns Carry CLEAR if no acknowledge
 ;
 ; Uses A, B, C, D
-i2c_write           CALL    i2c_send_byte
+i2c_write           PUSH    HL
+                    LD      HL, (port_b_mode)           ; L = port_b_mode, H = port_b_dir
+                    LD      D, A
+                    
+                    LD      A, ~(I2C_DATA_MASK|I2C_CLK_MASK)           ; Set SDA and SCL (port_b_dir bit) LOW
+                    AND     H
+                    SLA     A
+                    LD      H, A
+
+                    LD      C, PIO_B_CTRL
+                    LD      B, 8
+
+_fast_loop          LD      A, H
+                    SLA     D
+                    RR      A
+                    OUT     (C),L
+                    OUT     (PIO_B_CTRL), A
+
+                    OR      I2C_CLK_MASK
+                    OUT     (C), L
+                    OUT     (PIO_B_CTRL), A                 ; Clock high
+
+                    XOR     I2C_CLK_MASK
+                    OUT     (C), L
+                    OUT     (PIO_B_CTRL),A                  ; Clock low
+                    DJNZ    _fast_loop
+
+                    LD      A, H
+                    SCF
+                    RR      A
+                    OUT     (C),L                           ; Release SDA
+                    OUT     (PIO_B_CTRL), A
+
+                    OR      I2C_CLK_MASK
+                    OUT     (C), L
+                    OUT     (PIO_B_CTRL), A                 ; Clock high
+
+                    OUT     (C), L
+                    XOR     I2C_CLK_MASK
+                    LD      L, A
+                    LD      (port_b_dir), A
+
+                    IN      A, (PIO_B_DATA)                 ; Read ACK
+                    OUT     (C),L                           ; Clock low
+
+                    POP     HL
+
                     BIT     I2C_DATA_BIT, D     ; D contains acknowledge bit
                     SCF
                     RET     Z               ; Return with carry set if acknowledge bit is low
@@ -180,57 +226,7 @@ i2c_ack             CALL    i2c_sda_low
 ; Send a byte in A, returning the ACK state in D
 ; Uses A, B, C,
 ;
-i2c_send_byte       PUSH    HL
-                    PUSH    DE
-                    LD      HL, (port_b_mode)           ; L = port_b_mode, H = port_b_dir
-                    LD      D, A
-                    
-                    LD      A, ~(I2C_DATA_MASK|I2C_CLK_MASK)           ; Set SDA and SCL (port_b_dir bit) LOW
-                    AND     H
-                    SLA     A
-                    LD      H, A
-
-                    LD      C, PIO_B_CTRL
-                    LD      B, 8
-
-                    LD      E, I2C_CLK_MASK
-
-_fast_loop          LD      A, H
-                    SLA     D
-                    RR      A
-                    OUT     (C),L
-                    OUT     (PIO_B_CTRL), A
-
-                    OR      E
-                    OUT     (C), L
-                    OUT     (PIO_B_CTRL), A                 ; Clock high
-
-                    XOR     E
-                    OUT     (C), L
-                    OUT     (PIO_B_CTRL),A                  ; Clock low
-                    DJNZ    _fast_loop
-
-                    LD      A, H
-                    SCF
-                    RR      A
-                    OUT     (C),L                           ; Release SDA
-                    OUT     (PIO_B_CTRL), A
-
-                    OR      E
-                    OUT     (C), L
-                    OUT     (PIO_B_CTRL), A                 ; Clock high
-
-                    OUT     (C), L
-                    XOR     E
-                    LD      L, A
-                    LD      (port_b_dir), A
-
-                    IN      A, (PIO_B_DATA)                 ; Read ACK
-                    OUT     (C),L                           ; Clock low
-
-                    POP     DE
-                    POP     HL
-                    LD      D, A
+i2c_send_bytez      
                     RET
 
 ; SCL/SDA toggle routines

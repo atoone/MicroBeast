@@ -32,26 +32,25 @@ _offset_month           .EQU    5
 _offset_year            .EQU    6
 
 
-rtc_display_time        CALL    rtc_get_time
+rtc_display_time        LD      HL, time_scratch
+                        CALL    rtc_get_time_hl
+                        JP      NC, _get_error
+
                         LD      C, CARRIAGE_RETURN
                         CALL    bios_conout
                         
                         LD      A, (time_scratch+_offset_wkday)
                         LD      HL, weekdays
-                        AND     7
                         LD      C, A
 
                         CALL    _search_word
                         
 _get_date               CALL    _space
                         LD      A, (time_scratch+_offset_date)
-                        AND     03Fh
-                        CALL    _two_chars
-                        CALL    _space
+                        CALL    _two_chars_space
 
                         LD      A, (time_scratch+_offset_month)
                         LD      HL, _months
-                        AND     01fh
                         BIT     4, A
                         JR      Z, _month_ok
                         SUB     6
@@ -63,24 +62,19 @@ _month_ok               LD      C,A
                         CALL    _two_chars
 
                         LD      A, (time_scratch+_offset_year)
-                        CALL    _two_chars
-                        CALL    _space
+                        CALL    _two_chars_space
 
                         LD      A, (time_scratch+_offset_hour)
-                        AND     03fh
-                        CALL    _two_chars
-                        CALL    _space
+                        CALL    _two_chars_space
 
                         LD      A, (time_scratch+_offset_min)
-                        AND     07fh
-                        CALL    _two_chars
-                        CALL    _space
+                        CALL    _two_chars_space
 
                         LD      A, (time_scratch+_offset_sec)
-                        AND     07fh
                         CALL    _two_chars
                         RET
 
+_two_chars_space       CALL    _two_chars
 _space                  LD      C, ' '
                         JP      bios_conout
 
@@ -144,27 +138,6 @@ _months                 .DB "Jan",0
                         .DB "Nov",0
                         .DB "Dec",0
 
-;
-; Read the time into the temp_data area
-; Returns with Carry SET if successful, else Carry CLEAR
-;
-rtc_get_time            LD      H, RTC_ADDRESS
-                        LD      L, RTC_REG_SEC
-                        CALL    i2c_read_from
-                        JR      NC, _get_error
-                        LD      HL, time_scratch
-                        LD      B, 7
-                        JR      _store_time
-_get_loop               PUSH    BC 
-                        CALL    i2c_ack
-                        CALL    i2c_read
-                        POP     BC
-_store_time             LD      (HL), A
-                        INC     HL
-                        DJNZ    _get_loop
-                        CALL    i2c_stop
-                        SCF
-                        RET
 
 _get_error              CALL    i2c_stop
                         CALL    m_print_inline 

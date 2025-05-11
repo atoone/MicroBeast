@@ -1,4 +1,4 @@
 # Globber script for Flash image
 #
-append file firmware_p24.bin exactly 64k pad 0
+append file firmware_p25.bin exactly 64k pad 0
 append file ../cpm/microbeast.img

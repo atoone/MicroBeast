@@ -192,7 +192,7 @@ _wait_byte          LD      A, (HL)
                     RET
 
 ;
-; Write a flash data block. This uses Page 0 to write the data, so the source must be above 4000h
+; Write a flash data block. This uses Page 0 to write the data, so the source must be above 3FFFh
 ;
 ;       D -> 7 bit index of 4K sector being written
 ;       HL -> Address of source data

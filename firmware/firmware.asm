@@ -33,7 +33,7 @@
                     DI                              ; Disable Z80 interrupts
                     JR      _start
 
-                    .DB     "Firmware 1.4 01/10/23",0,0
+                    .DB     "Firmware 1.6 11/05/25",0,0
 
 _start              LD      SP, 0h                  ; Set SP
 
@@ -174,7 +174,63 @@ _wait_loop          IN      A, (C)
                     RET
 
 welcome             .db "************************", 0
-welcome2            .db "* MICRO BEAST  Ver 1_4 *", 0
+welcome2            .db "* MICRO BEAST  Ver 1_6 *", 0
+
+;
+; Write A as a hex byte
+; Overwrites A...
+;
+uart_hex            PUSH    AF
+                    SRA     A
+                    SRA     A
+                    SRA     A
+                    SRA     A
+                    CALL    to_hex
+                    CALL    uart_send
+                    POP     AF
+                    CALL    to_hex
+                    JP      uart_send
+;
+; Returns the low nibble of A as a hex digit
+;
+to_hex              AND $0F      ;LOW NIBBLE ONLY
+                    ADD A,$90
+                    DAA 
+                    ADC A,$40
+                    DAA 
+                    RET 
+;
+; Inline send. Sends the zero terminated string immediately following the call to this function to the UART.
+;  e.g.             CALL    uart_inline
+;                   .DB     "My text to send", 0
+;                   <code continues after message...>
+; Returns with Carry set if the string was successfully sent, otherwise, carry is clear.
+;
+; Uses A 
+;
+uart_inline         EX      (SP), HL
+                    CALL    uart_string
+                    JP      C, _inline_end      
+_find_end           LD      A, (HL)             ; Get the current character  (Carry preserved)
+                    INC     HL                  ; Point to next character    (Carry preserved)
+                    AND     A                   ; Test if the current character was zero (Clears carry)
+                    JP      NZ, _find_end       ; If it was, we're done, otherwise repeat
+_inline_end         EX      (SP), HL
+                    RET
+;
+; Send a zero terminated string pointed to by HL to the UART
+;
+; Returns with Carry Set if the string was sent sucessfully, clear otherwise
+;                    
+uart_string         LD      A,(HL)
+                    INC     HL
+                    AND     A
+                    JP      Z, _string_end
+                    CALL    uart_send
+                    JP      C, uart_string
+                    RET
+_string_end         SCF
+                    RET
 
 ; =============================================== Font =====================================================
 ;

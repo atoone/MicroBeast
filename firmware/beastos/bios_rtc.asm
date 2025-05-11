@@ -103,6 +103,43 @@ rtc_ack_error           CALL    i2c_stop
                         .DB     "\n\rRTC Panic",0
                         RET
 
+;
+; Read the time to the 7 bytes starting at HL
+; Returns with Carry SET if successful, else Carry CLEAR
+;
+rtc_get_time_hl         PUSH    HL
+                        LD      H, RTC_ADDRESS
+                        LD      L, RTC_REG_SEC
+                        CALL    i2c_read_from
+                        POP     BC
+                        RET     NC
+                        LD      HL, _masktable
+                        JR      _store_time
+_get_loop               PUSH    BC 
+                        CALL    i2c_ack
+                        CALL    i2c_read
+                        POP     BC
+_store_time             AND     (HL)
+                        LD      (BC), A
+                        INC     HL
+                        INC     BC
+                        LD      A, (HL)
+                        AND     A
+                        JR      NZ, _get_loop
+                        CALL    i2c_stop
+                        SCF
+                        RET
+
+_masktable              .db     07fh        ; Seconds
+                        .db     07fh        ; Minutes
+                        .db     03fh        ; Hours
+                        .db     007h        ; Weekday
+                        .db     03Fh        ; Date
+                        .db     01fh        ; Month
+                        .db     0ffh        ; Year
+                        .db     000h        ; End of mask marker
+
+
                         ;  Initial time on power up..
 time_scratch            .db  23h            ; Seconds
                         .db  59h            ; Minutes

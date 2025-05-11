@@ -90,13 +90,19 @@ CFLAGS_TRACK_CURSOR .EQU    2               ; LED display is tracking cursor pos
 CFLAGS_SHOW_MOVED   .EQU    4               ; Show display as being moved by user
 CFLAGS_ESCAPE       .EQU    8               ; Escape sequence started
 CFLAGS_CURSOR_ON    .EQU    16              ; Cursor is currently displayed
+CFLAGS_LED_OFF      .EQU    32              ; If set, don't echo to the LED display
 
 SHOW_MOVE_DELAY     .EQU    60              ; How long to show the display has been moved
 
 ;------------------------------- BIOS customisation  ------------------------------------------------
 
-drive_a_mem_page    .BLOCK  1
-drive_b_mem_page    .BLOCK  1
+drive_a_mem_page    .BLOCK  1               ; First page in RAM/ROM for the Drive A image  - NOTE: These values must be in order of drive number
+drive_b_mem_page    .BLOCK  1               ; First page in RAM/ROM for the Drive B image
+
+page_0_mapping      .BLOCK  1               ; Stores the user mapping for these pages, so they can be correctly restored after interrupts
+page_1_mapping      .BLOCK  1
+page_2_mapping      .BLOCK  1
+page_3_mapping      .BLOCK  1
 
 ;------------------------------- BDOS variables ------------------------------------------------
 ; *** TRACK AND SECTOR MUST BE IN THIS ORDER - READ BY _get_memdisc_addr ***
@@ -109,10 +115,12 @@ sys_seldsk          .BLOCK  1               ; Byte, current selected disk drive 
 sys_alv0            .BLOCK  32              ; 32 bytes, allocation vector 0 (max 255 blocks)
 sys_alv1            .BLOCK  32              ; 32 bytes, allocation vector 1 (max 255 blocks)
 
-display_buffer      .BLOCK  24*2            ; 26 byte scratch area used for composing display output (eg. rtc time display etc.)
+display_buffer      .BLOCK  24*2            ; 48 byte scratch area used for composing display output (eg. rtc time display etc.)
 
-intr_stackarea      .BLOCK  32              ; Interrupt handler stack
+intr_stackarea      .BLOCK  24              ; Interrupt handler stack
 intr_stack          .BLOCK  2
+
+user_interrupt      .BLOCK  2               ; Address of user interrupt routine, or zero
 
 ; Panic codes
 ;

@@ -347,6 +347,7 @@ KEY_CTRL_S      .EQU    13h
 KEY_CTRL_U      .EQU    15h
 KEY_CTRL_X      .EQU    18h
 KEY_CTRL_Z      .EQU    1Ah
+KEY_ESCAPE      .EQU    1Bh
 
 KEY_BACKSPACE   .EQU    08h
 
@@ -370,6 +371,7 @@ KEY_CTRL_LEFT   .EQU    146
 KEY_CTRL_RIGHT  .EQU    147
 KEY_CTRL_ENTER  .EQU    148
 KEY_CTRL_SPACE  .EQU    149 
+KEY_CTRL_D      .EQU    150
 
 _keyboard_size  .EQU    48
 
@@ -392,16 +394,16 @@ _shifted        .DB     "VCXZ", 0, 0
                 .DB     "GFDSA", 0
                 .DB     "TREWQ", 0              ; Shift + down?
                 .DB     "%$", 35, 34, "!", 0    ; Shift + up
-                .DB     "^&*()", 0              ; Shift + delete
+                .DB     "^&*()", KEY_DELETE     ; Shift + delete
                 .DB     "YUIOP;"
                 .DB     "HJKL,", 0              ; Shift + enter
                 .DB     "BNM", 0,0,0            ; Shift left + right
 
 _ctrl           .DB    0,KEY_CTRL_C,KEY_CTRL_X,KEY_CTRL_Z,0,0
-                .DB    0,0,0,KEY_CTRL_S,0,0
+                .DB    0,0,KEY_CTRL_D,KEY_CTRL_S,0,0
                 .DB    0,KEY_CTRL_R,KEY_CTRL_E,0,0,KEY_CTRL_DOWN
                 .DB    0,0,0,27h,7Ch,KEY_CTRL_UP ; Vertical bar, single quote
-                .DB    "{}`[]",KEY_DELETE
+                .DB    "{}`[]", KEY_ESCAPE
                 .DB    0,KEY_CTRL_U, "+=-", 0
                 .DB    0, "<@>_", KEY_CTRL_ENTER
                 .DB    "\\?/", KEY_CTRL_SPACE,KEY_CTRL_LEFT,KEY_CTRL_RIGHT

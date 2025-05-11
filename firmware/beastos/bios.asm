@@ -27,7 +27,7 @@
 ;
                     .MODULE  main
 
-BIOS_START          .EQU    0EE00h
+BIOS_START          .EQU    0EA00h   ; If this is changed, CP/M must be rebuilt and the disk image updated
 BIOS_TOP            .EQU    0FDFDh
 
 CCP                 .EQU    BIOS_START - 01600h
@@ -76,7 +76,9 @@ BIOS_BOOT_TRACKS    .EQU    2
 BIOS_SECTOR_ADDRESS .EQU    tpabuf
 
 DRIVE_A_PAGE        .EQU    04h     ; Page 4 of ROM - offset 010000h
-DRIVE_B_PAGE        .EQU    24h     ; Page 4 of RAM
+DRIVE_B_PAGE        .EQU    25h     ; Page 5 of RAM
+
+CONSOLE_PAGE        .EQU    24h     ; Page 4 of RAM - Console emulation for non-VideoBeast systems
 
 ; Disk Parameter Headers -------------------------------------------------------
 ; These are 256K discs, equivalent to this disc format (for cpmtools)
@@ -104,7 +106,7 @@ dpb0                .DW     MEMDISK_SECTORS     ; SPT - sectors per track
                     .DB     3                   ; BSH - block shift factor  BSH+BLM together mean 1024 byte blocksize
                     .DB     7                   ; BLM - block mask
                     .DB     0                   ; EXM - Extent mask
-                    .DW     248                 ; DSM - Storage size (blocks - 1)
+                    .DW     247                 ; DSM - Storage size (blocks - 1)
                     .DW     63                  ; DRM - Number of directory entries - 1
                     .DB     192                 ; AL0 - 1 bit set per directory block
                     .DB     0                   ; AL1 - ... 8 more bits
@@ -115,7 +117,7 @@ dpb1                .DW     MEMDISK_SECTORS     ; SPT - sectors per track
                     .DB     3                   ; BSH - block shift factor  BSH+BLM together mean 1024 byte blocksize
                     .DB     7                   ; BLM - block mask
                     .DB     0                   ; EXM - Extent mask
-                    .DW     248                 ; DSM - Storage size (blocks - 1)
+                    .DW     247                 ; DSM - Storage size (blocks - 1)
                     .DW     63                  ; DRM - Number of directory entries - 1
                     .DB     192                 ; AL0 - 1 bit set per directory block
                     .DB     0                   ; AL1 - ... 8 more bits
@@ -319,7 +321,7 @@ _conout_disp        LD      A, (console_escape)             ; Test to see if han
 
                     LD      A, (console_flags)              ; Test to see if we're expecting an escape character
                     AND     CFLAGS_ESCAPE
-                    JR      Z, _conout_check_esc
+                    JP      Z, _conout_check_esc
 
                                                             ; If so, this is the first character after we got an escape...
                     LD      DE, (cursor_row)                ; Get cursor position in DE
@@ -370,19 +372,31 @@ _conout_not_home    CP      'I'                         ; Reverse line feed. Ins
                     CP      'J'
                     JR      NZ, _conout_not_clr_sc
 
-                    ; TODO... Clear to end of screen
-                    RET
+                    CALL    _conout_clr_ln
+                    LD      BC, (cursor_row)
+                    LD      C, 0
+_conout_clr_scrn    INC     B
+                    LD      A, (console_height)
+                    CP      B
+                    JP      Z, _redraw_buffer
+                    PUSH    BC
+                    LD      A, B
+                    CALL    clear_screen_row
+                    POP     BC
+                    JR      _conout_clr_scrn
 
 _conout_not_clr_sc  CP      'K'
                     JR      NZ, _conout_not_clr_ln
 
-                    LD      BC, (cursor_row)
+                    CALL   _conout_clr_ln
+                    JP     _redraw_buffer
+
+_conout_clr_ln      LD      BC, (cursor_row)
                     DEC     B
                     LD      A, C
                     DEC     A
                     LD      C, B
-                    CALL   clear_screen_row
-                    JP     _redraw_buffer
+                    JP      clear_screen_row
 
 _conout_not_clr_ln  CP      'Y'
                     JR      NZ, _conout_not_pos
@@ -445,7 +459,7 @@ _conout_pos_param   SUB     31
                     CALL    _conout_reset_seq
                     JR      _conout_csr_update
 
-_conout_esc_foreg   LD      A, (console_colour)
+_conout_esc_backg   LD      A, (console_colour)
                     AND     0F0h
                     LD      B, A
                     LD      A, C
@@ -455,7 +469,7 @@ _conout_set_colour  OR      B
                     LD      (console_colour), A
                     JR      _conout_reset_seq
 
-_conout_esc_backg   LD      A, (console_colour)
+_conout_esc_foreg   LD      A, (console_colour)
                     AND     0Fh
                     LD      B, A
                     LD      A, C
@@ -483,7 +497,7 @@ _conout_track_col   LD      A, D
                     CP      B
                     LD      (cursor_col), A
                     JR      NZ, _conout_check_col       ; If only column has changed, we may update display_col..
-                    JR      _redraw_buffer              ; Otherwise, nothing has changed. Make sure display is up to date
+                    JP      _redraw_buffer              ; Otherwise, nothing has changed. Make sure display is up to date
 
 _conout_check_row   AND     A                           
                     JR      NZ, _conout_chk_bottom         
@@ -563,12 +577,40 @@ _conout_row_postv   LD      A, (console_height)
                     JR      NZ, _conout_update_display
 
                     ; display row below screen
+                    PUSH    HL
                     LD      A, (screen_offset)
                     INC     A
                     AND     03Fh
                     LD      (screen_offset), A
-                    LD      A, C
-                    PUSH    HL
+                    ; SUB     C
+                    AND     03Fh
+                    LD      L, A
+
+                    LD      A, (screen_page)
+                    CP      VIDEOBEAST_PAGE
+                    JR      NZ, _not_videobeast
+
+                    DI
+                    OUT     (IO_MEM_1), A
+                    LD      A, VB_UNLOCK
+                    LD      (VB_REGISTERS_LOCKED), A
+                    LD      A, L
+                    ADD     A, A
+                    ADD     A, A
+                    ADD     A, A
+                    LD      (VB_LAYER_4+LAYER_SCROLL_Y), A
+                    LD      A, 010h
+                    JR      C, _conout_scroll_xy
+                    XOR     A
+_conout_scroll_xy   LD      (VB_LAYER_4+LAYER_SCROLL_XY), A
+                    LD      (VB_REGISTERS_LOCKED), A    ; Either value will re-lock registers..
+
+                    LD      A, (page_1_mapping)
+                    OUT     (IO_MEM_1), A
+                    EI 
+
+_not_videobeast     LD      A, C
+                    
                     LD      C, 0
                     CALL    clear_screen_row
                     POP     HL 
@@ -589,7 +631,11 @@ _redraw_buffer      DI
 ;----------------------------------------------------------------------------------------------------
 ; Note that this uses Mem Page 1
 ;
-unsafe_redraw       LD      HL, (display_row)       ; Calculate our screen source in DE
+unsafe_redraw       LD      A, (console_flags)
+                    AND     CFLAGS_LED_OFF
+                    RET     NZ
+
+unsafe_led_redraw   LD      HL, (display_row)       ; Calculate our screen source in DE
                     LD      A, (screen_offset)      
                     ADD     A, L
 
@@ -605,7 +651,7 @@ unsafe_redraw       LD      HL, (display_row)       ; Calculate our screen sourc
                     LD      C, 0
 
                     LD      A, (console_flags)      ; Don't draw last character if we've moved
-                    AND     CFLAGS_SHOW_MOVED
+                    AND     CFLAGS_SHOW_MOVED | CFLAGS_LED_OFF
                     JR      Z, _full_redraw
                     DEC     B
 
@@ -628,7 +674,7 @@ _redraw_skip_char   INC     HL
                     INC     DE
 
                     LD      A, (console_flags)
-                    AND     CFLAGS_SHOW_MOVED
+                    AND     CFLAGS_SHOW_MOVED | CFLAGS_LED_OFF
                     LD      A, (DE)  
                     JR      Z, _redraw_normal
 
@@ -659,7 +705,7 @@ _redraw_skip_bri    INC     HL
 
                     LD      A, (console_flags)
                     LD      C, A
-                    AND     CFLAGS_SHOW_MOVED
+                    AND     CFLAGS_SHOW_MOVED | CFLAGS_LED_OFF
                     JR      Z, _redraw_done
 
                     ; We've moved the cursor, so draw the last character as our location bitmap..
@@ -667,7 +713,14 @@ _redraw_moved       LD      (HL), 0
                     INC     HL
                     LD      (HL), DISP_DEFAULT_BRIGHTNESS
                     LD      A, C
-                    AND     CFLAGS_TRACK_CURSOR
+                    AND     CFLAGS_LED_OFF
+                    LD      A, C
+                    JR      Z, _led_normal
+
+                    LD      HL, LED_OFF_BITMAP
+                    JR      _redraw_map2
+
+_led_normal         AND     CFLAGS_TRACK_CURSOR
                     JR      NZ, _redraw_tracking
 
                     LD      HL, 0
@@ -714,7 +767,7 @@ _redraw_map2        LD      A, DISPLAY_WIDTH-1
                     LD      C, DISP_DEFAULT_BRIGHTNESS
                     CALL    disp_char_bright
 
-_redraw_done        LD      A, RAM_PAGE_1
+_redraw_done        LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
                     RET
 
@@ -727,6 +780,7 @@ MOVE_ROW_BITMAP_L   .EQU    0c0h
 MOVE_ABOVE_BITMAP_H .EQU    05h
 MOVE_BELOW_BITMAP_H .EQU    28h
 MOVE_AT_LEFT_BITMAP .EQU    030h
+LED_OFF_BITMAP      .EQU    0907h
 
 ;---------------------------------------- Simple character output.. 
 _conout_character   LD      DE, (cursor_row)
@@ -769,7 +823,7 @@ _conout_visible     LD      DE, (cursor_row)
                     LD      A, (console_colour)
                     INC     HL
                     LD      (HL), A
-                    LD      A, RAM_PAGE_1
+                    LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
 
                     LD      DE, (cursor_row)
@@ -807,14 +861,16 @@ clear_screen_row    LD      H, A
                     LD      A, (screen_page)
                     OUT     (IO_MEM_1), A
 
-                    LD      A, ' '
-_clear_loop         LD      (HL), A
+_clear_loop         LD      A, ' '
+                    LD      (HL), A
                     INC     L
                     LD      (HL), C
                     INC     L
+                    LD      A, 0FEh
+                    CP      L
                     JR      NZ, _clear_loop
 
-                    LD      A, RAM_PAGE_1
+                    LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
                     RET
 ;------------------------------------------------------  
@@ -908,9 +964,9 @@ _read_next          LDI
                     LD      A, B
                     JR      _read_page
 
-_read_write_done    LD      A, RAM_PAGE_1   ; Return page map to normal
+_read_write_done    LD      A, (page_1_mapping)   ; Return page map to normal
                     OUT     (IO_MEM_1), A
-                    LD      A, RAM_PAGE_2
+                    LD      A, (page_2_mapping)
                     OUT     (IO_MEM_2), A
                     EI
                     XOR     A               ; No errors
@@ -1049,10 +1105,15 @@ m_print_a_safe      PUSH    HL
 configure_hardware  DI     
                     LD      A, RAM_PAGE_0
                     OUT     (IO_MEM_0), A       ; Page 0 is RAM 0 
+                    LD      (page_0_mapping), A
                     INC     A
                     OUT     (IO_MEM_1), A       ; Page 1 is RAM 1
+                    LD      (page_1_mapping), A
                     INC      A
                     OUT     (IO_MEM_2), A       ; Page 2 is RAM 2 
+                    LD      (page_2_mapping), A
+                    INC     A                   ; Assume we're in RAM 3
+                    LD      (page_3_mapping), A
 
                     LD      HL, 0FE00h          ; Set up the IM 2 table
                     LD      B, 0
@@ -1066,6 +1127,9 @@ _fill_vector        LD      (HL), 0FDh
                     LD      (0FDFDh), A
                     LD      HL, interrupt_handler
                     LD      (0FDFEh), HL
+
+                    LD      HL, 0
+                    LD      (user_interrupt), HL
 
                     LD      A, 2
                     OUT     (PIO_B_CTRL),A      ; Zero interrupt vector
@@ -1140,7 +1204,37 @@ _ctrl_error         LD      A, D
 
 ; SHOULD NOT BE CALLED WITH INTERRUPTS ENABLED!
 ;
-setup_screen        LD      DE, screen_page     ; Copy the startup defaults to the shared_data area
+setup_screen        LD      A, VIDEOBEAST_PAGE
+                    OUT     (IO_MEM_1), A
+                    LD      HL, PAGE_1_START
+                    XOR     A
+                    LD      B, A
+_videobeast_check   LD      (HL), A
+                    CP      (HL)
+                    JR      NZ, _no_videobeast
+                    ADD     A, 13
+                    DJNZ    _videobeast_check
+
+                    LD      A, VIDEOBEAST_PAGE
+                    LD      (_screen_defaults), A
+                    LD      HL, 0501Eh          ; 80 x 30 screen
+                    LD      (_screen_size), HL
+
+                    LD      A, VB_UNLOCK
+                    LD      (VB_REGISTERS_LOCKED), A
+                    LD      A, MODE_848 | MODE_MAP_16K
+                    LD      (VB_MODE), A
+                    XOR     A
+                    LD      (VB_PAGE_0), A
+                    LD      (VB_LAYER_5), A             ; Clear page 'above' our console
+
+                    LD      HL, _videobeast
+                    LD      DE, VB_LAYER_4
+                    LD      BC, _videobeast_length
+                    LDIR
+                    LD      (VB_REGISTERS_LOCKED), A  ; Lock registers
+
+_no_videobeast      LD      DE, screen_page     ; Copy the startup defaults to the shared_data area
                     LD      HL, _screen_defaults
                     LD      BC, _defaults_length
                     LDIR
@@ -1152,26 +1246,32 @@ setup_screen        LD      DE, screen_page     ; Copy the startup defaults to t
                     LD      A, (console_colour)
                     LD      B, A
                     LD      (PAGE_1_START), BC
-                    LD      BC, 16382
+                    LD      BC, 16378           ; Don't over write last couple of bytes (VideoBeast)
                     LDIR
 
                     CALL    disp_clear          ; Clear the LED screen
 
-restore_page_return LD      A, RAM_PAGE_1       ; Return Page 1 to normal RAM
+restore_page_return LD      A, (page_1_mapping)       ; Return Page 1 to normal RAM
                     OUT     (IO_MEM_1), A
                     RET
 
-_screen_defaults    .DB     RAM_PAGE_31         ; Screen buffer page
+_screen_defaults    .DB     CONSOLE_PAGE        ; Screen buffer page
                     .DB     0                   ; Row offset in buffer
                     .DB     0,0                 ; Row, column being shown on LED Display
                     .DB     1,1                 ; Row, column of cursor
-                    .DB     24,64               ; Console height (rows), width (columns)
-                    .DB     00Fh                ; Current colour [7:4] = background, [3:0] = foreground
+_screen_size        .DB     24,64               ; Console height (rows), width (columns)
+                    .DB     0F0h                ; Current colour [7:4] = background, [3:0] = foreground
                     .DB     CFLAGS_TRACK_CURSOR ; Flags
                     .DB     0                   ; Timer
                     .DB     0, 0                ; Escape char and first parameter
                     .DB     0                   ; Disable identifier sequence
 _defaults_length    .EQU    $-_screen_defaults
+
+_videobeast         .DB     TYPE_TEXT, 1, 30, 2, 81         ; Text, top, bottom, left, right
+                    .DB     0, 0, 0                         ; No scroll
+                    .DB     0, 010h                         ; Char map in page 0, font 16x2K -> 32K
+                    .DB     7, 0                            ; Palette 0, no hi-res
+_videobeast_length  .EQU    $-_videobeast
 
 interrupt_handler   DI
                     LD      (intr_stack), SP
@@ -1216,11 +1316,18 @@ _timer_done         LD      A, (console_flags)
                     JR      Z, _int_done
                     CALL    update_cursor
 
-_int_done           EXX
+_int_done           LD      HL, (user_interrupt)
+                    LD      A, H
+                    OR      L
+                    CALL    NZ, _do_usr_interrupt
+
+                    EXX
                     POP     AF
                     LD      SP, (intr_stack)
                     EI
 _do_reti            RETI
+
+_do_usr_interrupt   JP      (HL)
 
 ; Enter with A containing a special control character
 ;
@@ -1243,7 +1350,7 @@ _flags_and_redraw   OR      CFLAGS_SHOW_MOVED
                     LD      (console_flags), A
                     LD      A, SHOW_MOVE_DELAY
                     LD      (console_timer),A
-                    CALL    unsafe_redraw
+                    CALL    unsafe_led_redraw       ; Always redraw regardless of LED status
                     JR      _shift_done
 
 _not_ctrl_up        CP      KEY_CTRL_DOWN
@@ -1298,11 +1405,18 @@ _col_ok             LD      (display_col), A
                     JR      _flags_and_redraw
 
 _not_ctrl_enter     CP      KEY_CTRL_SPACE
-                    JR      NZ, _shift_done
+                    JR      NZ, _not_ctrl_space
 
                     XOR     A
                     LD      (display_col), A
                     JR      _shift_down
+
+_not_ctrl_space     CP      KEY_CTRL_D
+                    JR      NZ, _shift_done
+
+                    LD      A, (console_flags)
+                    XOR     CFLAGS_LED_OFF
+                    JR      _flags_and_redraw
 
 _shift_done         XOR     A
                     LD      (control_key_pressed),A
@@ -1327,15 +1441,56 @@ update_cursor       LD      A, (display_row)    ; Are we on the same row as the 
                     SUB     B
                     RET     M
 
+                    LD      B, 0
+                    LD      C, A
+
+                    LD      A, (screen_page)
+                    CP      VIDEOBEAST_PAGE
+                    JR      NZ, _skip_videobeast
+
+                    OUT     (IO_MEM_1), A
+
+                    LD      A, (screen_offset)
+                    LD      H, A
+                    LD      A, (cursor_row)         ; 1 based
+                    DEC     A
+                    ADD     A, H
+                    AND     03Fh
+                    OR      040h                    ; Page 1 for videobeast
+                    LD      H, A
+                    LD      A, (cursor_col)
+                    DEC     A
+                    ADD     A, A
+                    LD      L, A
+                    INC     L
+
+                    LD      A, E
+                    AND     20h
+                    LD      A, (console_colour)
+                    JR      Z, _normal
+                    RRC     A 
+                    RRC     A
+                    RRC     A
+                    RRC     A
+_normal             LD      (HL), A
+
+                    DEC     HL
+                    LD      A, (page_1_mapping)
+                    OUT     (IO_MEM_1), A
+
+_skip_videobeast    LD      A, C
                     CP      DISPLAY_WIDTH
                     RET     NC
 
-                    ; At this point, A holds the current display column for the cursor..
-                    LD      C, A
-                    LD      B, 0
+                    LD      A, (console_flags)
+                    AND     CFLAGS_LED_OFF
+                    RET     NZ
+
+                    ; At this point, BC holds the current display column for the cursor..
                     LD      HL, display_buffer
                     ADD     HL, BC
                     ADD     HL, BC
+
                     LD      A, E
                     AND     20h
                     LD      A, (HL)
@@ -1353,18 +1508,130 @@ _unblink            JP    disp_character
                     .INCLUDE "../font.asm"
                     .INCLUDE "bios_rtc.asm"
                     .INCLUDE "../flash.asm"
+                    .INCLUDE "videobeast.asm"
+;
+;
+; Page mapping - since the BIOS uses other pages to manage disk and screen, it must also manage the expected page for the user 
+; programs, to prevent them from being unexpectedly changed (eg. after interrupts).
+;
 
-JUMP_TABLE_SIZE     .EQU    6
+; Get the User page mapping. Sets A to the physical (RAM/ROM) page selelcted for logical page C (0-2)
+; Returns 0FFh for invalid page values
+get_page_mapping    LD      A, C
+                    CALL    _mapping_address
+                    LD      A, 0FFH
+                    RET     NC
+                    LD      A, (HL)
+                    RET
+
+; Set the User page mapping. Sets page A (0-2) to the physical (RAM/ROM) page in E
+; Returns with carry SET if successful. The given logical page will now point to the physical page in RAM or ROM
+;
+set_page_mapping    CALL    _mapping_address
+                    RET     NC
+                    LD      (HL), E 
+
+                    ADD     A, IO_MEM_0             ; NOTE: Order is important here. Interrupts may occur after the page is stored (above)
+                    LD      C, A                    ; This may result in the page being prematurely mapped, but that's OK.
+                    OUT     (C), E                  ; If we tried to set the page before storing the new default we'd have to disable interrupts
+                    SCF                             ; To avoid a race condition
+                    RET
+
+_mapping_address    CP      4
+                    RET     NC
+                    LD      C, A
+                    LD      B, 0
+                    LD      HL, page_0_mapping
+                    ADD     HL, BC
+                    SCF
+                    RET
+
+; Get the page in memory being used as the base for the drive selected by A
+; Returns A = Page in ROM/RAM for the given drive
+;    or   A = 0 if the selected drive is not supported.
+;
+get_disk_page       CP      MAX_DRIVES
+                    JR      NC, _disk_page_err
+                    LD      C, A
+                    LD      B, 0
+                    LD      HL, drive_a_mem_page
+                    ADD     HL, BC
+                    LD      A, (HL)
+                    RET
+_disk_page_err      XOR     A
+                    RET
+
+get_version         LD      A, 016h
+                    RET
+
+;
+; Erase and write flash data. Data is written to 4K sectors, which are erased before writing.
+; This uses Page 0 to write the data, so the source must be above 3FFFh
+;
+;       D -> 7 bit index of 4K sector being written
+;       HL -> Address of source data
+;       BC -> bytes to write
+;
+; Returns D pointing to last sector written
+; Note: This means if BC is an exact multiple of sector size, D is returned as the previous sector
+
+bios_flash_write    CALL    flash_write 
+                    LD      A, (page_0_mapping)
+                    OUT     (IO_MEM_0), A
+                    RET 
+
+;
+; Set or query the user interrupt. The specified routine will be called after keyboard polling, every 60th of a 
+; second. The shadow register set is selected before the call (EXX), and AF is preserved. The routine should 
+; RETurn normally. Interrupt routines survive warm reboots, but no special measures are taken to ensure the
+; memory they occupy is preserved.
+;
+;   Parameters: 
+;       HL = Address of user interrupt routine, or zero to disable. Call with 0FFFFh to query the current value
+;   Returns:
+;       The address of the current user interrupt routine, or zero if none is configured.
+;
+;
+set_usr_interrupt   LD      A, H
+                    AND     L
+                    INC     A
+                    JR      Z, _return_usr_int
+                    LD      (user_interrupt), HL
+_return_usr_int     LD      HL, (user_interrupt)
+                    RET
+
+JUMP_TABLE_SIZE     .EQU    18
+
+.IF $ > (BIOS_TOP - (3*JUMP_TABLE_SIZE))
+    .ECHO "BIOS No room for Jump Table ("
+    .ECHO $
+    .ECHO " > "
+    .ECHO (BIOS_TOP-(3*JUMP_TABLE_SIZE))
+    .ECHO ") \n\n"
+    .STOP
+.ENDIF
 
 BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
                     .FILL   BIOS_SPARE, 0
 
-                    JP          i2c_start
-                    JP          i2c_stop
-                    JP          i2c_write_to
-                    JP          i2c_read_from
-                    JP          wait_for_key        ; Waits for until a key is pressed and released
-                    JP          play_note           ; Plays the note defined by DE (octave, note) and C (duration, tenths)
+                    JP          set_usr_interrupt   ; 18 (0FDC7h) - Set the User interrupt vector. HL = 0 to clear, or address of user routine. HL= 0FFFFh to query.
+                    JP          bios_flash_write    ; 17 (0FDCAh) - Erase and write flash data. Data is written to 4K sectors, which are erased before writing.
+                    JP          get_disk_page       ; 16 (0FDCDh) - Get the page in RAM/ROM being used as the base for the drive selected by A, or zero if error.
+                    JP          rtc_get_time_hl     ; 15 (0FDD0h) - Get the time to the 7 bytes pointed to by HL. Returns carry set if sucessful
+                    JP          disp_char_bright    ; 14 (0FDD3h) - Set LED Digit A to brightness C
+                    JP          disp_bitmask        ; 13 (0FDD6h) - Directly write bitmask in HL to display column A
+                    JP          m_print_inline      ; 12 (0FDD9h) - Print the characters following the call instruction
+                    JP          get_page_mapping    ; 11 (0FDDCh) - Return the logical (cpu) page C (0-2) in A
+                    JP          set_page_mapping    ; 10 (0FDDFh) - Set the logical (cpu) page in A (0-2) to the physical (RAM/ROM) page in E
+                    JP          i2c_start           ; 9  (0FDE2h) - Sends I2C start sequence
+                    JP          i2c_stop            ; 8  (0FDE5h) - Sends I2C stop sequence
+                    JP          i2c_write           ; 7  (0FDE8h) - Write A as a byte to i2c bus. Carry SET if success. i2c_stop is not called.
+                    JP          i2c_read            ; 6  (0FDEBh) - Read byte from i2C into A, without ACK
+                    JP          i2c_write_to        ; 5  (0FDEEh) - Prepare to write to Device address H, Register L. Carry SET if success. i2c_stop is not called.
+                    JP          i2c_read_from       ; 4  (0FDF1h) - Read a byte int A from Device address H, Register L. Carry SET if success. i2c_stop is not called.
+                    JP          wait_for_key        ; 3  (0FDF4h) - Waits for until a key is pressed and released
+                    JP          play_note           ; 2  (0FDF7h) - Plays the note defined by DE (octave, note) and C (duration, tenths)
+                    JP          get_version         ; 1  (0FDFAh) - Returns the Bios version in A
 
 
 .IF $ > BIOS_TOP

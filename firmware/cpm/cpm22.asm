@@ -18,7 +18,7 @@
 ;   Set memory limit here. This is the amount of contigeous
 ; ram starting from 0000. CP/M will reside at the end of this space.
 ;
-MEM	.EQU	61		;for a 62k system
+MEM	.EQU	60		;for a 61k system
 ;
 SYSDSK	.EQU	0		;system disk number 0=A: 1=B:... (was C:)
 IOBYTE	.EQU	3		;i/o definition byte.
