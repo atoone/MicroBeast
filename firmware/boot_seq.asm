@@ -78,7 +78,7 @@ _beep_delay3        DJNZ    _beep_delay3            ; 13 * (count-2) + 8
 ; Now initialise the UART
 ;
 ;
-                    LD      BC, UART_19200 | (UART_MODE_AUTO << 8)  ;;; TODO This is sooooo wrong - sets C (divisor) to 38 
+                    LD      BC, UART_19200 | (UART_MODE_NO_FLOW << 8)  ;;; TODO This is sooooo wrong - sets C (divisor) to 38 
                     LD      A, 80h                      ; Divisor Latch Setting Mode
                     OUT     (UART_LINE_CTRL), A         ;  - entered by writing 1 to bit 7 of LCR
                     NOP
