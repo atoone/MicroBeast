@@ -687,12 +687,13 @@ _redraw_normal      CP      (HL)
                     LD      (HL), A
                     PUSH    BC
                     PUSH    HL
-                    PUSH    DE
-                    LD      A, C                    ; Ugh... disp_char_bright has parameters in other order..
-                    LD      C, (HL)
-                    SLA     C
-                    SLA     C
-                    SLA     C
+                    PUSH    DE                
+                    LD      A, (HL)             ; Ugh... disp_char_bright has parameters in other order..
+                    SRL     A
+                    AND     078h
+                    LD      B, A
+                    LD      A, C
+                    LD      C, B
                     CALL    disp_char_bright    ; Column A, brightness C
                     POP     DE
                     POP     HL
@@ -1566,7 +1567,7 @@ get_disk_page       CP      MAX_DRIVES
 _disk_page_err      XOR     A
                     RET
 
-get_version         LD      A, 016h
+get_version         LD      A, 017h
                     RET
 
 ;

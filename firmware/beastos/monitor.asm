@@ -116,7 +116,7 @@ _speed_value        .DB     " 0,0Mhz", 0
                     CALL    pause_for_ticks
 
                     CALL    m_print_inline
-                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.6", 0
+                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.7", 0
 
                     LD      BC, 60h
                     CALL    pause_for_ticks
@@ -684,7 +684,7 @@ display_mem_row     LD      C, CARRIAGE_RETURN
                     CALL    bios_conout
 
 _hex_values         CALL    m_print_inline
-                    .DB     ESCAPE_CHAR, 'b', CPM_NUM+8, 0
+                    .DB     ESCAPE_CHAR, 'b', CPM_NUM+7, 0
 
                     LD      HL, (monitor_address)
                     LD      B, 8
