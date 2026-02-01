@@ -29,7 +29,7 @@
 MONITOR_START       .EQU   0DB00h
 
                     .ORG   MONITOR_START
-                    CALL   configure_hardware
+                    CALL   configure_hardware           ; Interrupts are configured and enabled here
 
                     LD      A, 1
                     LD      (iobyte), A
@@ -102,7 +102,7 @@ _skip_leading       LD       A, (bcd_scratch+2)
                     ADD     A, '0'
                     LD      (_speed_value+3), A
 
-                    LD      BC, 60h
+                    LD      BC, 30h
                     CALL    pause_for_ticks
 
                     CALL    m_print_inline
@@ -111,6 +111,24 @@ _speed_value        .DB     " 0,0Mhz", 0
 
                     LD      HL, interrupt_handler
                     LD      (0FDFEh), HL
+
+                    ; Everything is now set up and running as we expect. Now handle boot options.
+
+                    LD      A, (boot_mode)
+                    AND     BOOT_NO_LED
+                    JR      Z, _keep_led_on
+
+                    CALL    m_print_inline
+                    .DB     NEWLINE, CARRIAGE_RETURN, "LED Off", 0
+
+                    LD      A, (default_screen_flags)
+                    OR      CFLAGS_LED_OFF
+                    LD      (default_screen_flags), A
+                    LD      (console_flags), A
+
+_keep_led_on        LD      A, (boot_mode)
+                    AND     BOOT_TO_CPM
+                    JR      NZ, boot_cpm
 
                     LD      BC, 60h
                     CALL    pause_for_ticks

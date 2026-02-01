@@ -33,8 +33,7 @@ port_b_mode         .BLOCK  1
 port_b_dir          .BLOCK  1
 port_b_data         .BLOCK  1
 
-; Display functions
-display_address     .BLOCK  1              ; byte - I/O address of the display driver (right or left) being written to
+boot_mode           .BLOCK  1              ; Set during boot. 
 
 ;
 ; Stuff
@@ -122,6 +121,9 @@ intr_stack          .BLOCK  2
 
 user_interrupt      .BLOCK  2               ; Address of user interrupt routine, or zero
 
+; Display functions
+display_address     .BLOCK  1              ; byte - I/O address of the display driver (right or left) being written to
+
 ; Panic codes
 ;
 PANIC_0001          .EQU    0F001h
@@ -129,3 +131,7 @@ PANIC_0002          .EQU    0F002h
 PANIC_0003          .EQU    0F003h
 PANIC_0004          .EQU    0F004h
 
+; Boot options
+BOOT_TO_CPM         .EQU    001h
+BOOT_NO_LED         .EQU    002h
+BOOT_RESTORE_B      .EQU    004h

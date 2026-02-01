@@ -139,11 +139,19 @@ _next_frame         LD      A, (temp_byte)
                     LD      E, DISP_DEFAULT_BRIGHTNESS      ; Reset brightness
                     CALL    disp_brightness
 
-                    LD      A, 0
+                    XOR     A
                     LD      HL, welcome2
                     CALL    disp_string
 
-                    CALL    wait_key
+                    LD      A, (boot_mode)                  ; If boot mode is zero, skip reading the RTC options byte
+                    AND     A
+                    JR      Z, _skip_opts
+
+                    CALL    rtc_get_opts                    ; Fetch the boot options byte
+_skip_opts          LD      (boot_mode), A                  ; Store our boot mode...  
+
+                    AND     A
+                    CALL    Z, wait_key                     ; Only wait for a key if the boot options are unset/default
 
 ;======================================== SETUP BIOS ========================================
 
@@ -232,14 +240,16 @@ uart_string         LD      A,(HL)
 _string_end         SCF
                     RET
 
+
+
 ; =============================================== Font =====================================================
 ;
-                    .INCLUDE disp.asm
-                    .INCLUDE font.asm
+                    .INCLUDE  disp.asm
+                    .INCLUDE  font.asm
                     .INCLUDE  i2c.asm
                     .INCLUDE  io.asm
                     .INCLUDE  uart.asm
-                    .include  memory_test.asm
-
+                    .INCLUDE  memory_test.asm
+                    .INCLUDE  rtc_options.asm
 bios_seg            .INCLUDE  build/monitor.inc
 .END

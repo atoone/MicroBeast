@@ -220,7 +220,7 @@ _uart_ready5
 ;
 ; Now check keys all read as un-pressed, apart from DELETE
 ;
-                    XOR     A                       ; Reset boot mode
+                    LD      A, NORMAL_BOOT     ; Reset boot mode
                     LD      (boot_mode), A
 
                     LD      BC, 0F700h
@@ -238,12 +238,16 @@ _key_loop           IN      A, (C)
                     JP      panic
 
 _delete_row         LD      A, L
-                    CP      01Fh                ; If it is the delete row and not the delete key, panic 0004
+                    CP      02Fh                ; If it's the zero key, we need to skip boot opts.
+                    JR      NZ, _not_zero_key
+
+                    LD      A, SKIP_OPTS
+                    LD      (boot_mode), A
+                    JR      _key_ok
+
+_not_zero_key       CP      01Fh                ; If it is the delete row and not the delete key, panic 0004
                     LD      HL, PANIC_0004
                     JP      NZ, panic
-
-                    LD      A, 0FFh
-                    LD      (boot_mode), A
 
                     CALL    uart_inline
                     .DB     "Memory test\r\n", 0

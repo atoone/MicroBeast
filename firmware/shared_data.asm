@@ -10,7 +10,7 @@ port_b_dir          .equ    0FF01h
 port_b_data         .equ    0FF02h
 
 ; Boot 
-boot_mode           .equ    0FF03h          ; Zero = normal boot, non-zero = delete pressed
+boot_mode           .equ    0FF03h          ; Boot options byte, once keyboard has been checked. Default/unset is zero
 temp_byte           .equ    0FF04h
 
 ; Display functions
@@ -62,3 +62,9 @@ PANIC_0001          .EQU    0F001h
 PANIC_0002          .EQU    0F002h
 PANIC_0003          .EQU    0F003h
 PANIC_0004          .EQU    0F004h
+
+;
+; Boot mode
+;
+NORMAL_BOOT         .EQU    0FFh
+SKIP_OPTS           .EQU    000h             ; Skip reading boot options from RTC RAM

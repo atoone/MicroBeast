@@ -30,8 +30,7 @@ keyboard_init       LD      HL, keyboard_state
                     XOR     A
 _init_loop          LD      (HL),A
                     INC     HL
-                    DEC     B
-                    JR      NZ, _init_loop
+                    DJNZ    _init_loop
                     XOR     A
                     LD      (input_size),A
                     LD      (input_free),A

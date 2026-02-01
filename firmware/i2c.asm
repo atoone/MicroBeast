@@ -222,13 +222,6 @@ i2c_ack             CALL    i2c_sda_low
                     CALL    i2c_scl_cycle
                     JR      i2c_sda_high
 
-;
-; Send a byte in A, returning the ACK state in D
-; Uses A, B, C,
-;
-i2c_send_bytez      
-                    RET
-
 ; SCL/SDA toggle routines
 ;
 ; All use A

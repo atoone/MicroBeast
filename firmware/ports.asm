@@ -148,4 +148,6 @@ RTC_REG_TRIM            .EQU    008h    ; Trim, initially 0. B7: Sign, 1=Add, 0=
 
 RTC_64HZ_ENABLED        .EQU    044h    ; Value for RTC_REG_CTRL to enable 64Hz interrupt output
 
-RTC_WEEKDAY_RUNNING     .EQU    008h    ; Value for RTC_REG_WKDAY for normall running of clock
+RTC_WEEKDAY_RUNNING     .EQU    008h    ; Value for RTC_REG_WKDAY for normal running of clock
+
+RTC_SRAM_OPT            .EQU    020h    ; Start address of the 4 byte boot options settings in SRAM

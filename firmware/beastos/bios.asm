@@ -138,7 +138,22 @@ bios_boot     ;  0 Initialize - This is called on first boot when CCP and BIOS h
                     LD      (usrdrv),A
                     INC     A
                     LD      (iobyte),A           ; Input on keyboard, output on display
+
+                    LD      A, (boot_mode)       ; If we need to restore the B drive on boot, patch the CCP command
+                    AND     BOOT_RESTORE_B       ; See CP/M 2.2 Application Node 01 2/20/82 "The CCP Auto-Load Feature"
+                    JR      Z, start_cpm
+
+                    LD      HL, _restore_command ; Auto-run the RESTORE command
+                    LD      DE, CCP+7
+                    LD      BC, _restore_command_len
+                    LDIR
+                    LD      A, (boot_mode)       ; Clear the boot_mode flag to prevent accidentally overwriting drive B
+                    XOR     BOOT_RESTORE_B
+                    LD      (boot_mode), A
                     JR      start_cpm
+
+_restore_command     .DB     7, "RESTORE", 0
+_restore_command_len .EQU   $-_restore_command
 
 ;------------------------------------------------------                    
 bios_wboot    ;  1 Warm boot - Hardware is intialised, but CCP should be reloaded before being run
@@ -1262,7 +1277,7 @@ _screen_defaults    .DB     CONSOLE_PAGE        ; Screen buffer page
                     .DB     1,1                 ; Row, column of cursor
 _screen_size        .DB     24,64               ; Console height (rows), width (columns)
                     .DB     0F0h                ; Current colour [7:4] = background, [3:0] = foreground
-                    .DB     CFLAGS_TRACK_CURSOR ; Flags
+default_screen_flags .DB     CFLAGS_TRACK_CURSOR ; Flags
                     .DB     0                   ; Timer
                     .DB     0, 0                ; Escape char and first parameter
                     .DB     0                   ; Disable identifier sequence
@@ -1606,7 +1621,7 @@ set_usr_interrupt   LD      A, H
 _return_usr_int     LD      HL, (user_interrupt)
                     RET
 
-JUMP_TABLE_SIZE     .EQU    18
+JUMP_TABLE_SIZE     .EQU    19
 
 .IF $ > (BIOS_TOP - (3*JUMP_TABLE_SIZE))
     .ECHO "BIOS No room for Jump Table ("
@@ -1620,6 +1635,7 @@ JUMP_TABLE_SIZE     .EQU    18
 BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
                     .FILL   BIOS_SPARE, 0
 
+                    JP          i2c_ack             ; 19 (0FDC4h) - Send an i2c ACK.
                     JP          set_usr_interrupt   ; 18 (0FDC7h) - Set the User interrupt vector. HL = 0 to clear, or address of user routine. HL= 0FFFFh to query.
                     JP          bios_flash_write    ; 17 (0FDCAh) - Erase and write flash data. Data is written to 4K sectors, which are erased before writing.
                     JP          get_disk_page       ; 16 (0FDCDh) - Get the page in RAM/ROM being used as the base for the drive selected by A, or zero if error.
