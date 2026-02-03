@@ -135,3 +135,4 @@ PANIC_0004          .EQU    0F004h
 BOOT_TO_CPM         .EQU    001h
 BOOT_NO_LED         .EQU    002h
 BOOT_RESTORE_B      .EQU    004h
+BOOT_TTY_INPUT      .EQU    008h

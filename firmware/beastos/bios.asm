@@ -136,8 +136,13 @@ bios_boot     ;  0 Initialize - This is called on first boot when CCP and BIOS h
                     CALL    configure_hardware
                     XOR     A
                     LD      (usrdrv),A
-                    INC     A
-                    LD      (iobyte),A           ; Input on keyboard, output on display
+
+                    LD      A, (boot_mode)
+                    AND     BOOT_TTY_INPUT
+                    LD      A, 1                 ; Input on keyboard, output on display
+                    JR      Z, _boot_iobyte
+                    XOR     A                    ; Input from serial/tty, output on display
+_boot_iobyte        LD      (iobyte),A           
 
                     LD      A, (boot_mode)       ; If we need to restore the B drive on boot, patch the CCP command
                     AND     BOOT_RESTORE_B       ; See CP/M 2.2 Application Node 01 2/20/82 "The CCP Auto-Load Feature"
@@ -274,7 +279,7 @@ _conin_kbd          LD      A, (console_identify)           ; If the terminal ha
 
 _conin_tty          CALL    uart_receive
                     RET     C
-                    JR      _conin_tty
+                    JR      _conin_wait                     ; Flash cursor if nothing is waiting...
      
 _conin_rdr          LD      A, (iobyte)
                     AND     0ch
@@ -296,8 +301,14 @@ _conin_wait         LD      A, (console_flags)              ; Turn the cursor on
                     LD      (cursor_col),A
                     CALL    _conout_csr_update
                     EI
-                    CALL    get_key
-                    LD      B, A
+
+                    LD      A, (iobyte)
+                    AND     03h
+                    JR      Z, _conin_wait_tty
+
+                    CALL    get_key                         ; Wait for a key
+
+_conin_done         LD      B, A
                     LD      A, (console_flags)
                     AND     ~CFLAGS_SHOW_CURSOR
                     LD      (console_flags), A
@@ -310,7 +321,11 @@ _conin_wait         LD      A, (console_flags)              ; Turn the cursor on
                     POP     BC
                     LD      A, B
                     RET
-     
+
+_conin_wait_tty     CALL    uart_receive
+                    JR      C, _conin_done
+                    JR      _conin_wait_tty
+
 _indentity_sequence .DB     'K', '/', ESCAPE_CHAR           ; RETURNED BY VT-52 emulation - note sequence is reversed
 IDENTITY_LENGTH     .EQU    3
 

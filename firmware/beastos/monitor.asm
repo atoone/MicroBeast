@@ -31,8 +31,12 @@ MONITOR_START       .EQU   0DB00h
                     .ORG   MONITOR_START
                     CALL   configure_hardware           ; Interrupts are configured and enabled here
 
+                    LD      A, (boot_mode)
+                    AND     BOOT_TTY_INPUT
                     LD      A, 1
-                    LD      (iobyte), A
+                    JR      Z, _set_iobyte
+                    XOR     A
+_set_iobyte         LD      (iobyte), A
 
                     LD      A, DRIVE_B_PAGE
                     LD      (drive_b_mem_page), A
@@ -495,6 +499,7 @@ _wait_key           CALL    bios_conist
                     AND     A
                     JR      Z, _wait_key
                     CALL    bios_conin
+                    CALL    translate_cursors
 
                     CP      KEY_UP
                     JR      NZ, _not_up
@@ -614,6 +619,8 @@ _edit_set_col       .DB     0
 _edit_next_digit    LD      (edit_digit), DE
 
 _edit_input         CALL    bios_conin
+                    CALL    translate_cursors
+
                     CP      'x'
                     JP      Z, execute_col
 
@@ -875,36 +882,39 @@ menu_current        .DW     0
 start_menu          XOR    A
                     LD     (menu_index), A
                     LD     (menu_address), HL
+                    LD     (keyboard_escape), A
 
-_menu_loop          CALL   _display_menu
-                    LD     BC, 600
-                    CALL   pause_for_ticks
-                    CALL   bios_conist
-                    AND    A
-                    RET    Z
+_menu_loop          CALL    _display_menu
+                    LD      BC, 600
+                    CALL    pause_for_ticks
+                    CALL    bios_conist
+                    AND     A
+                    RET     Z
 
-_menu_key           CALL   bios_conin
-                    CP     KEY_DOWN
-                    JR     NZ, _menu_up
+_menu_key           CALL    bios_conin
+                    CALL    translate_cursors
 
-                    LD      A, (menu_index)
+                    CP      KEY_DOWN
+                    JR      Z, _menu_down
+                    CP      KEY_UP
+                    JR      Z, _menu_up
+                    CP      KEY_BACKSPACE
+                    RET     Z
+                    CP      KEY_ENTER
+                    JR      Z, _menu_enter
+                    JR      _menu_loop
+
+_menu_down          LD      A, (menu_index)
                     INC     A
 _menu_set_index     LD      (menu_index),A
                     JR      _menu_loop
 
-_menu_up            CP      KEY_UP
-                    JR      NZ, _menu_delete
-                    LD      A, (menu_index)
+_menu_up            LD      A, (menu_index)
                     DEC     A
                     JR      Z, _menu_loop
                     JR      _menu_set_index
 
-_menu_delete        CP      KEY_BACKSPACE
-                    RET     Z
-
-_menu_enter         CP      KEY_ENTER
-                    JR      NZ, _menu_loop
-                    LD      A, (menu_index)
+_menu_enter         LD      A, (menu_index)
                     AND     A
                     JR      Z, _menu_loop
                     LD      HL, (menu_current)
@@ -915,6 +925,41 @@ _menu_enter         CP      KEY_ENTER
                     PUSH    HL
                     RET
 
+keyboard_escape     .DB     0
+
+translate_cursors   CP      KEY_ESCAPE
+                    LD      E, A 
+                    JR      Z, _set_escape
+                    LD      A, (keyboard_escape)
+                    AND     A
+                    LD      A, E                    ; Just return key code if escape hasn't been pressed
+                    RET     Z
+                                                    ; Handle VT Escape sequences
+                    CP      '['                     ; Ignore '[' (VT100 cursor sequence)
+                    RET     Z
+                    CP      'A'
+                    LD      D, KEY_UP
+                    JR      Z, _translate_key
+                    CP      'B'
+                    LD      D, KEY_DOWN
+                    JR      Z, _translate_key
+                    CP      'C'
+                    LD      D, KEY_RIGHT
+                    JR      Z, _translate_key
+                    CP      'D'
+                    LD      D, KEY_LEFT
+                    JR      Z, _translate_key
+                    XOR     A                       ; Ignore rest of escape sequence
+                    LD      (keyboard_escape), A
+_return_e           LD      A, E
+                    RET
+
+_translate_key      LD      A, D
+                    RET
+
+_set_escape         LD      A, 1
+                    LD      (keyboard_escape), A
+                    JR      _return_e
 
 
 _display_menu       LD      C, CARRIAGE_RETURN

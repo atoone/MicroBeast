@@ -33,7 +33,7 @@
                     DI                              ; Disable Z80 interrupts
                     JR      _start
 
-                    .DB     "Firmware 1.7 30/12/25",0,0
+                    .DB     "Firmware 1.7 03/02/26",0,0
 
 _start              LD      SP, 0h                  ; Set SP
 

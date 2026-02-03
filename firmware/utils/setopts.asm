@@ -48,6 +48,7 @@ i2c_stop                .EQU    MBB_I2C_STOP
 BOOT_TO_CPM             .EQU    001h
 BOOT_NO_LED             .EQU    002h
 BOOT_RESTORE_B          .EQU    004h
+BOOT_TTY_INPUT          .EQU    008h
 
                         LD      (old_stack), SP
                         LD      SP, old_stack
@@ -74,6 +75,10 @@ BOOT_RESTORE_B          .EQU    004h
 
                         LD      DE, restore_b
                         LD      A, BOOT_RESTORE_B
+                        CALL    update_opt
+
+                        LD      DE, tty_input
+                        LD      A, BOOT_TTY_INPUT
                         CALL    update_opt
 
                         LD      A, (current_opts)
@@ -155,9 +160,10 @@ opt_mask                .DB     0
 
 welcome_message         .DB     "SETOPTS: Boot Options$"
 
-boot_cpm                .DB     "\n\r\n\rBoot to CP/M?    $"
-disable_led             .DB         "\n\rLED Off?         $"
-restore_b               .DB         "\n\rRestore Drive B? $"
+boot_cpm                .DB     "\n\r\n\rBoot to CP/M?     $"
+disable_led             .DB         "\n\rLED Off?          $"
+restore_b               .DB         "\n\rRestore Drive B?  $"
+tty_input               .DB         "\n\rSerial/TTY input? $"
 
 updated_message         .DB     "\n\r\n\rBoot options updated$"
 failed_message          .DB     "\n\r\n\rError writing options$"
