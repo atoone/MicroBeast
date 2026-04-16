@@ -10,4 +10,5 @@ cd ..
 
 copy beastos\bios.inc build\bios_1_7.inc
 copy cpm\microbeast.img build\bootdisk_p25.img
-
+copy firmware.lst build\firmware.lst
+copy beastos\monitor.lst build\monitor.lst

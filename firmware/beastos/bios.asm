@@ -1308,7 +1308,9 @@ interrupt_handler   DI
                     LD      (intr_stack), SP
                     LD      SP, intr_stack
                     PUSH    AF
-                    EXX
+                    PUSH    HL
+                    PUSH    DE
+                    PUSH    BC
                     CALL    keyboard_poll
 
                     LD      A,(control_key_pressed)
@@ -1352,7 +1354,9 @@ _int_done           LD      HL, (user_interrupt)
                     OR      L
                     CALL    NZ, _do_usr_interrupt
 
-                    EXX
+                    POP     BC
+                    POP     DE
+                    POP     HL
                     POP     AF
                     LD      SP, (intr_stack)
                     EI

@@ -53,7 +53,7 @@ disp_config         LD      L, CONFIG_PAGE
                     CALL    i2c_address_w
                     LD      A, 000h
                     CALL    i2c_write
-                    LD      A, 001h         ; Turn display on
+                    LD      A, 011h         ; Turn display on *Change to higher frequency switching to reduce board noise
                     CALL    i2c_write
                     LD      A, 078h         ; 0.020mA
                     CALL    i2c_write

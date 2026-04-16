@@ -151,6 +151,11 @@ MBB_I2C_STOP            .EQU    0FDE5h
 MBB_I2C_START           .EQU    0FDE2h
 
 ;
+; CALL MBB_I2C_ACK - Send I2C ACK sequence
+;
+MBB_I2C_ACK             .EQU    0FDC4h
+
+;
 ; CALL MBB_SET_PAGE - Set page mapping
 ;   Parameters:
 ;       A = Logical (CPU) page to set (0-2)
@@ -242,8 +247,3 @@ MBB_FLASH_WRITE         .EQU    0FDCAh
 ;       The address of the current user interrupt routine, or zero if none is configured.
 ;
 MBB_SET_USR_INT         .EQU    0FDC7h
-
-;
-; CALL MBB_I2C_ACK - Send I2C ACK sequence
-;
-MBB_I2C_ACK             .EQU    0FDC4h
