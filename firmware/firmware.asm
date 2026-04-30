@@ -26,20 +26,73 @@
 ;
                     .MODULE  main
                     .INCLUDE "ports.asm"
-                    .INCLUDE "shared_data.asm"
-
+                    .INCLUDE "common_data.asm"
+                    .INCLUDE "firmware_vars.asm"
+                    .INCLUDE "beastos/beastos.inc"
 
                     .org 0h
                     DI                              ; Disable Z80 interrupts
                     JR      _start
 
-                    .DB     "Firmware 1.7 03/02/26",0,0
+                    .DB     "Firmware 1.8 28/04/26",0,0
 
 _start              LD      SP, 0h                  ; Set SP
 
                     .INCLUDE    "boot_seq.asm"
 
-_main               CALL    init_portb
+                    LD      A, (device_id)
+                    CP      DEVICE_MICRO
+                    JR      Z, _do_micro_intro
+
+                    CALL    nanobeast_intro
+                    JR      _finish_boot
+
+_do_micro_intro     CALL    microbeast_intro
+
+_finish_boot        LD      A, (boot_mode)                  ; If boot mode is zero, skip reading the RTC options byte
+                    AND     A
+                    JR      Z, _skip_opts
+
+                    CALL    rtc_get_opts                    ; Fetch the boot options byte
+_skip_opts          LD      C, A
+                    LD      A, (display_detect)             ; If no display is detected, disable output and just use UART
+                    AND     A
+                    LD      A, C
+                    JR      NZ, _has_display
+                    OR      BOOT_NO_LED
+
+_has_display        LD      (boot_mode), A                  ; Store our boot mode...  
+
+                    AND     A
+                    CALL    Z, wait_key                     ; Only wait for a key if the boot options are unset/default
+
+                    ;
+                    ; TODO - if input is from the UART, use that as primary input?
+                    ;
+
+;======================================== SETUP BIOS ========================================
+
+                    LD      HL, monitor_img
+                    CALL    get_img_header
+                    PUSH    DE
+                    LDIR
+
+                    LD      HL, bios_img
+                    CALL    get_img_header
+                    LDIR
+                    RET
+                    
+get_img_header      LD      E, (HL)
+                    INC     HL
+                    LD      D, (HL)
+                    INC     HL
+                    LD      C, (HL)
+                    INC     HL
+                    LD      B, (HL)
+                    INC     HL
+                    RET
+
+microbeast_intro    CALL    init_portb
                     CALL    i2c_bus_reset
                     
                     CALL    display_init
@@ -141,48 +194,64 @@ _next_frame         LD      A, (temp_byte)
 
                     XOR     A
                     LD      HL, welcome2
-                    CALL    disp_string
+                    JP      disp_string
 
-                    LD      A, (boot_mode)                  ; If boot mode is zero, skip reading the RTC options byte
-                    AND     A
-                    JR      Z, _skip_opts
-
-                    CALL    rtc_get_opts                    ; Fetch the boot options byte
-_skip_opts          LD      (boot_mode), A                  ; Store our boot mode...  
-
-                    AND     A
-                    CALL    Z, wait_key                     ; Only wait for a key if the boot options are unset/default
-
-;======================================== SETUP BIOS ========================================
-
-                    LD      HL, bios_seg+4
-                    LD      DE, (bios_seg)
-                    PUSH    DE
-                    LD      BC, (bios_seg+2)
-                    LDIR
-                    RET
-                    
 little_sin          .DB     0, 3, 9, 19, 32, 48, 64, 81, 96, 110, 120, 126, 128, 126, 120, 110, 96, 81, 65, 48, 33, 19, 9, 3  ; 24 values
 
-halt                JR      halt
+nanobeast_intro     XOR     A
+                    LD      HL, welcome3
+                    JP      disp_string
 
-wait_key            LD      BC, 0000h   ; Keyboard all rows
-_wait_key           IN      A, (C)
+nano_jump_table     .INCLUDE "nano/jump_table.asm"
+
+micro_jump_table    .INCLUDE "micro/jump_table.asm"
+
+;
+; Dummy labels for routines in jump table that we don't support
+
+m_print_inline      JP      uart_inline
+
+load_ccp
+configure_hardware
+set_usr_interrupt
+bios_flash_write
+get_disk_page
+rtc_get_time_hl
+get_page_mapping
+set_page_mapping
+get_version 
+wait_for_key
+                    CALL    uart_inline
+                    .DB     "BIOS Call not supported\n\r", 0
+                    JR      $
+
+;
+; Waits for a key or input from the UART
+; On return 
+;       Carry is SET if input was received from the UART
+;       Carry is CLEAR if input was received from the keyboard
+;
+wait_key            CALL    uart_receive
+                    RET     C
+
+                    LD      BC, 0000h           ; Keyboard all rows
+                    IN      A, (C)
                     AND     3fh
                     CP      3fh
-                    JP      Z, _wait_key
+                    JP      Z, wait_key
 
 _wait_up            LD      D, 100
 _wait_loop          IN      A, (C)
                     AND     3fh
-                    CP      3fh
+                    CP      3fh                 ; Carry flag is clear if keys are all released
                     JP      NZ, _wait_up
                     DEC     D
                     JP      NZ, _wait_loop
                     RET
 
 welcome             .db "************************", 0
-welcome2            .db "* MICRO BEAST  Ver 1_7 *", 0
+welcome2            .db "* MICRO BEAST  Ver 1_8 *", 0
+welcome3            .db "* NANO BEAST   Ver 1_8 *", 0
 
 ;
 ; Write A as a hex byte
@@ -244,12 +313,16 @@ _string_end         SCF
 
 ; =============================================== Font =====================================================
 ;
-                    .INCLUDE  disp.asm
-                    .INCLUDE  font.asm
-                    .INCLUDE  i2c.asm
-                    .INCLUDE  io.asm
+                    .INCLUDE  beastos/display.asm
+                    .INCLUDE  beastos/font.asm
+                    .INCLUDE  micro/i2c.asm
+                    .INCLUDE  micro/io.asm
+                    .INCLUDE  nano/i2c.asm
+                    .INCLUDE  nano/io.asm
+                    .INCLUDE  keyboard.inc
                     .INCLUDE  uart.asm
                     .INCLUDE  memory_test.asm
                     .INCLUDE  rtc_options.asm
-bios_seg            .INCLUDE  build/monitor.inc
+monitor_img         .INCLUDE  build/monitor.inc
+bios_img            .INCLUDE  build/bios.inc
 .END

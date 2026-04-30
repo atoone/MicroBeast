@@ -27,11 +27,12 @@
 ;
                     .MODULE  main
 
-BIOS_START          .EQU    0EA00h   ; If this is changed, CP/M must be rebuilt and the disk image updated
-BIOS_TOP            .EQU    0FDFDh
+                    .INCLUDE "beastos.inc" ; Defines BIOS_START and other entry points
+                    .INCLUDE "../common_data.asm"
+                    .INCLUDE "system_vars.asm"
 
 CCP                 .EQU    BIOS_START - 01600h
-BDOS                .EQU    CCP + 0806h
+BDOS_START          .EQU    CCP + 0806h
 
 CCP_SECTOR_COUNT    .EQU    (BIOS_START-CCP)/128
 
@@ -43,11 +44,11 @@ CCP_SECTOR_COUNT    .EQU    (BIOS_START-CCP)/128
     .STOP
 .ENDIF
 
-iobyte              .EQU    03h     ; Location of Intel standard I/O definition byte
-usrdrv              .EQU    04h     ; Location of Current user number and drive
-tpabuf              .EQU    0080h   ; Default I/O buffer and command line storage
+iobyte              .EQU    BIOS_IOBYTE         ; Location of Intel standard I/O definition byte
+usrdrv              .EQU    04h                 ; Location of Current user number and drive
+tpabuf              .EQU    BIOS_DMA_ADDRESS    ; Default I/O buffer and command line storage
 
-IO_BAT              .EQU    02h     ; CONsole IO defined by RDR for input, LST for output
+IO_BAT              .EQU    02h                 ; CONsole IO defined by RDR for input, LST for output
 
 bios_start          .ORG    BIOS_START
 
@@ -68,17 +69,6 @@ wboote              JP      bios_wboot    ;  1 Warm boot
                     JP      bios_write    ; 14 Write 128 bytes
                     JP      bios_listst   ; 15 List status
                     JP      bios_sectrn   ; 16 Sector translate
-
-MEMDISK_SECTORS     .EQU    26
-MEMDISK_TRACKS      .EQU    79
-
-BIOS_BOOT_TRACKS    .EQU    2
-BIOS_SECTOR_ADDRESS .EQU    tpabuf
-
-DRIVE_A_PAGE        .EQU    04h     ; Page 4 of ROM - offset 010000h
-DRIVE_B_PAGE        .EQU    25h     ; Page 5 of RAM
-
-CONSOLE_PAGE        .EQU    24h     ; Page 4 of RAM - Console emulation for non-VideoBeast systems
 
 ; Disk Parameter Headers -------------------------------------------------------
 ; These are 256K discs, equivalent to this disc format (for cpmtools)
@@ -175,7 +165,7 @@ start_cpm           EI                           ; Make sure interrupts are enab
                     LD      HL,wboote            ; Address of jump for a warm boot
                     LD      (01h),HL
                     LD      (05h),a              ; Opcode for 'JP'
-                    LD      HL,BDOS              ; Address of jump for the BDOS
+                    LD      HL,BDOS_START        ; Address of jump for the BDOS
                     LD      (06h),HL
                     LD      A,(usrdrv)           ; Save new drive number (0)  ; TODO: Ugh? Where is this set, what does it mean???
                     LD      C, A                 ; Pass drive number in C
@@ -1132,178 +1122,8 @@ m_print_a_safe      PUSH    HL
                     RET
 
 ;------------------------------------------------------  
-
-configure_hardware  DI     
-                    LD      A, RAM_PAGE_0
-                    OUT     (IO_MEM_0), A       ; Page 0 is RAM 0 
-                    LD      (page_0_mapping), A
-                    INC     A
-                    OUT     (IO_MEM_1), A       ; Page 1 is RAM 1
-                    LD      (page_1_mapping), A
-                    INC      A
-                    OUT     (IO_MEM_2), A       ; Page 2 is RAM 2 
-                    LD      (page_2_mapping), A
-                    INC     A                   ; Assume we're in RAM 3
-                    LD      (page_3_mapping), A
-
-                    LD      HL, 0FE00h          ; Set up the IM 2 table
-                    LD      B, 0
-_fill_vector        LD      (HL), 0FDh
-                    INC     HL
-                    DJNZ    _fill_vector
-
-                    CALL    keyboard_init       ; Set up the keyboard status tables
-
-                    LD      A, 0C3h             ; JP reset   instruction
-                    LD      (0FDFDh), A
-                    LD      HL, interrupt_handler
-                    LD      (0FDFEh), HL
-
-                    LD      HL, 0
-                    LD      (user_interrupt), HL
-
-                    LD      A, 2
-                    OUT     (PIO_B_CTRL),A      ; Zero interrupt vector
-
-                    LD      A, 0B7h             ; Enable interrupts on any of the following bits
-                    OUT     (PIO_B_CTRL),A
-                    NOP
-                    LD      A, 0CFh             ; Just B5 (RTC interrupt) 
-                    OUT     (PIO_B_CTRL),A
-
-                    LD      A, 0FEh
-                    LD      I, A
-                    IM      2
-
-                    CALL    setup_screen
-
-                    LD      A, DRIVE_A_PAGE
-                    LD      (drive_a_mem_page), A
-
-                    EI
-
-                    LD      A, 0
-                    CALL    uart_init           ; Reinitialise the UART to make sure we've not missed anything
-
-                    CALL    rtc_init            ; Make sure clock is running and reset time if necesary
-
-_set_ctrl           LD      B, 4                ; Set RTC Coarse mode and Output Pin to Square wave - gives 64 Hz pulse
-_set_ctrl_loop      PUSH    BC
-                    LD      H, RTC_ADDRESS      
-                    LD      L, RTC_REG_CTRL
-                    CALL    i2c_write_to
-                    JR      NC, _rtc_ack_error
-                    LD      A, RTC_64HZ_ENABLED
-                    CALL    i2c_write
-                    JR      NC, _rtc_ack_error
-                    XOR     A
-                    CALL    i2c_write
-_rtc_ack_error      CALL    i2c_stop
-
-                    CALL    _pause
-
-                    CALL    _check_ctrl
-                    POP     BC
-                    RET     Z
-                    DJNZ    _set_ctrl_loop
-                    RET
-
-_pause              LD      B, 0
-                    DJNZ    $
-                    RET
-
-; Check that the control is set to coarse trim and 0 offset
-; Returns with Zero flag set if settings are good.
+; Interrupt handler - reads the keyboard and handles cursor updates
 ;
-_check_ctrl         LD      H, RTC_ADDRESS      
-                    LD      L, RTC_REG_CTRL
-                    CALL    i2c_read_from
-                    LD      D, 2
-                    JR      NC, _ctrl_error
-                    LD      E, A
-                    CALL    i2c_ack
-                    CALL    i2c_read
-                    LD      D, A
-                    CALL    i2c_stop
-                    LD      A, E
-                    LD      B, 4
-                    CP      RTC_64HZ_ENABLED
-                    RET     NZ
-_ctrl_error         LD      A, D
-                    AND     A
-                    RET 
-
-; SHOULD NOT BE CALLED WITH INTERRUPTS ENABLED!
-;
-setup_screen        LD      A, VIDEOBEAST_PAGE
-                    OUT     (IO_MEM_1), A
-                    LD      HL, PAGE_1_START
-                    XOR     A
-                    LD      B, A
-_videobeast_check   LD      (HL), A
-                    CP      (HL)
-                    JR      NZ, _no_videobeast
-                    ADD     A, 13
-                    DJNZ    _videobeast_check
-
-                    LD      A, VIDEOBEAST_PAGE
-                    LD      (_screen_defaults), A
-                    LD      HL, 0501Eh          ; 80 x 30 screen
-                    LD      (_screen_size), HL
-
-                    LD      A, VB_UNLOCK
-                    LD      (VB_REGISTERS_LOCKED), A
-                    LD      A, MODE_848 | MODE_MAP_16K
-                    LD      (VB_MODE), A
-                    XOR     A
-                    LD      (VB_PAGE_0), A
-                    LD      (VB_LAYER_5), A             ; Clear page 'above' our console
-
-                    LD      HL, _videobeast
-                    LD      DE, VB_LAYER_4
-                    LD      BC, _videobeast_length
-                    LDIR
-                    LD      (VB_REGISTERS_LOCKED), A  ; Lock registers
-
-_no_videobeast      LD      DE, screen_page     ; Copy the startup defaults to the shared_data area
-                    LD      HL, _screen_defaults
-                    LD      BC, _defaults_length
-                    LDIR
-                    LD      A, (screen_page)    ; Clear the screen buffer
-                    OUT     (IO_MEM_1), A       ; Screen buffer is in PAGE_1
-                    LD      HL, PAGE_1_START
-                    LD      DE, PAGE_1_START+2
-                    LD      C, ' '
-                    LD      A, (console_colour)
-                    LD      B, A
-                    LD      (PAGE_1_START), BC
-                    LD      BC, 16378           ; Don't over write last couple of bytes (VideoBeast)
-                    LDIR
-
-                    CALL    disp_clear          ; Clear the LED screen
-
-restore_page_return LD      A, (page_1_mapping)       ; Return Page 1 to normal RAM
-                    OUT     (IO_MEM_1), A
-                    RET
-
-_screen_defaults    .DB     CONSOLE_PAGE        ; Screen buffer page
-                    .DB     0                   ; Row offset in buffer
-                    .DB     0,0                 ; Row, column being shown on LED Display
-                    .DB     1,1                 ; Row, column of cursor
-_screen_size        .DB     24,64               ; Console height (rows), width (columns)
-                    .DB     0F0h                ; Current colour [7:4] = background, [3:0] = foreground
-default_screen_flags .DB     CFLAGS_TRACK_CURSOR ; Flags
-                    .DB     0                   ; Timer
-                    .DB     0, 0                ; Escape char and first parameter
-                    .DB     0                   ; Disable identifier sequence
-_defaults_length    .EQU    $-_screen_defaults
-
-_videobeast         .DB     TYPE_TEXT, 1, 30, 2, 81         ; Text, top, bottom, left, right
-                    .DB     0, 0, 0                         ; No scroll
-                    .DB     0, 010h                         ; Char map in page 0, font 16x2K -> 32K
-                    .DB     7, 0                            ; Palette 0, no hi-res
-_videobeast_length  .EQU    $-_videobeast
-
 interrupt_handler   DI
                     LD      (intr_stack), SP
                     LD      SP, intr_stack
@@ -1535,16 +1355,99 @@ _unblink            JP    disp_character
 
                     .INCLUDE "../ports.asm"
 
-                    .INCLUDE "../io.asm"
+                    .INCLUDE "../keyboard.inc"
                     .INCLUDE "../uart.asm"
-                    .INCLUDE "../i2c.asm"
-
-                    .INCLUDE "../disp.asm"
-                    .INCLUDE "../font.asm"
-                    .INCLUDE "bios_rtc.asm"
                     .INCLUDE "../flash.asm"
+
+                    .INCLUDE "keyboard.asm"
+                    .INCLUDE "display.asm"
+                    .INCLUDE "font.asm"
+                    .INCLUDE "bios_rtc.asm"
                     .INCLUDE "videobeast.asm"
+
+; SHOULD NOT BE CALLED WITH INTERRUPTS ENABLED!
 ;
+setup_screen        LD      A, VIDEOBEAST_PAGE
+                    OUT     (IO_MEM_1), A
+                    LD      HL, PAGE_1_START
+                    XOR     A
+                    LD      B, A
+_videobeast_check   LD      (HL), A
+                    CP      (HL)
+                    JR      NZ, _no_videobeast
+                    ADD     A, 13
+                    DJNZ    _videobeast_check
+
+                    LD      A, VIDEOBEAST_PAGE
+                    LD      (_screen_defaults), A
+                    LD      HL, 0501Eh          ; 80 x 30 screen
+                    LD      (_screen_size), HL
+
+                    LD      A, VB_UNLOCK
+                    LD      (VB_REGISTERS_LOCKED), A
+                    LD      A, MODE_848 | MODE_MAP_16K
+                    LD      (VB_MODE), A
+                    XOR     A
+                    LD      (VB_PAGE_0), A
+                    LD      (VB_LAYER_5), A             ; Clear page 'above' our console
+
+                    LD      HL, _videobeast
+                    LD      DE, VB_LAYER_4
+                    LD      BC, _videobeast_length
+                    LDIR
+                    LD      (VB_REGISTERS_LOCKED), A  ; Lock registers
+
+_no_videobeast      LD      A, (boot_mode)
+                    AND     BOOT_NO_LED
+                    JR      Z, _keep_led_on
+                    LD      A, (default_screen_flags)
+                    OR      CFLAGS_LED_OFF
+                    LD      (default_screen_flags), A
+
+_keep_led_on        LD      DE, screen_page     ; Copy the startup defaults to the shared_data area
+                    LD      HL, _screen_defaults
+                    LD      BC, _defaults_length
+                    LDIR
+                    LD      A, (screen_page)    ; Clear the screen buffer
+                    OUT     (IO_MEM_1), A       ; Screen buffer is in PAGE_1
+                    LD      HL, PAGE_1_START
+                    LD      DE, PAGE_1_START+2
+                    LD      C, ' '
+                    LD      A, (console_colour)
+                    LD      B, A
+                    LD      (PAGE_1_START), BC
+                    LD      BC, 16378           ; Don't over write last couple of bytes (VideoBeast)
+                    LDIR
+
+                    CALL    disp_clear          ; Clear the LED screen
+
+restore_page_return LD      A, (page_1_mapping)       ; Return Page 1 to normal RAM
+                    OUT     (IO_MEM_1), A
+                    RET
+
+_screen_defaults    .DB     CONSOLE_PAGE        ; Screen buffer page
+                    .DB     0                   ; Row offset in buffer
+                    .DB     0,0                 ; Row, column being shown on LED Display
+                    .DB     1,1                 ; Row, column of cursor
+_screen_size        .DB     24,64               ; Console height (rows), width (columns)
+                    .DB     0F0h                ; Current colour [7:4] = background, [3:0] = foreground
+default_screen_flags .DB     CFLAGS_TRACK_CURSOR ; Flags
+                    .DB     0                   ; Timer
+                    .DB     0, 0                ; Escape char and first parameter
+                    .DB     0                   ; Disable identifier sequence
+_defaults_length    .EQU    $-_screen_defaults
+
+_videobeast         .DB     TYPE_TEXT, 1, 30, 2, 81         ; Text, top, bottom, left, right
+                    .DB     0, 0, 0                         ; No scroll
+                    .DB     0, 010h                         ; Char map in page 0, font 16x2K -> 32K
+                    .DB     7, 0                            ; Palette 0, no hi-res
+_videobeast_length  .EQU    $-_videobeast
+
+
+; =======================================================================================================================
+; Universal BeastOS jump table utils
+;
+
 ;
 ; Page mapping - since the BIOS uses other pages to manage disk and screen, it must also manage the expected page for the user 
 ; programs, to prevent them from being unexpectedly changed (eg. after interrupts).
@@ -1601,7 +1504,7 @@ get_disk_page       CP      MAX_DRIVES
 _disk_page_err      XOR     A
                     RET
 
-get_version         LD      A, 017h
+get_version         LD      A, 018h
                     RET
 
 ;
@@ -1640,7 +1543,68 @@ set_usr_interrupt   LD      A, H
 _return_usr_int     LD      HL, (user_interrupt)
                     RET
 
-JUMP_TABLE_SIZE     .EQU    19
+
+; =======================================================================================================================
+; End of core BIOS - hardware specific code  follows
+;
+
+configure_hardware  DI     
+                    LD      A, RAM_PAGE_0
+                    OUT     (IO_MEM_0), A       ; Page 0 is RAM 0 
+                    LD      (page_0_mapping), A
+                    INC     A
+                    OUT     (IO_MEM_1), A       ; Page 1 is RAM 1
+                    LD      (page_1_mapping), A
+                    INC      A
+                    OUT     (IO_MEM_2), A       ; Page 2 is RAM 2 
+                    LD      (page_2_mapping), A
+                    INC     A                   ; Assume we're in RAM 3
+                    LD      (page_3_mapping), A
+
+                    LD      HL, 0FE00h          ; Set up the IM 2 table
+                    LD      B, 0
+_fill_vector        LD      (HL), 0FDh
+                    INC     HL
+                    DJNZ    _fill_vector
+
+                    CALL    keyboard_init       ; Set up the keyboard status tables
+
+                    LD      A, 0C3h             ; JP instruction
+                    LD      (0FDFDh), A
+                    LD      HL, interrupt_handler
+                    LD      (0FDFEh), HL
+
+                    LD      HL, 0
+                    LD      (user_interrupt), HL
+
+                    LD      A, 2
+                    OUT     (PIO_B_CTRL),A      ; Zero interrupt vector
+
+                    LD      A, 0B7h             ; Enable interrupts on any of the following bits
+                    OUT     (PIO_B_CTRL),A
+                    NOP
+                    LD      A, 0CFh             ; Just B5 (RTC interrupt) 
+                    OUT     (PIO_B_CTRL),A
+
+                    LD      A, 0FEh
+                    LD      I, A
+                    IM      2
+
+                    CALL    setup_screen
+
+                    LD      A, DRIVE_A_PAGE
+                    LD      (drive_a_mem_page), A
+
+                    EI
+
+                    LD      A, 0
+                    CALL    uart_init           ; Reinitialise the UART to make sure we've not missed anything
+
+                    CALL    rtc_init            ; Make sure clock is running and reset time if necesary
+                    JP      rtc_64Hz            ; And set up the interrupt signal
+
+                    .INCLUDE "../micro/io.asm"
+                    .INCLUDE "../micro/i2c.asm"
 
 .IF $ > (BIOS_TOP - (3*JUMP_TABLE_SIZE))
     .ECHO "BIOS No room for Jump Table ("
@@ -1654,26 +1618,7 @@ JUMP_TABLE_SIZE     .EQU    19
 BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
                     .FILL   BIOS_SPARE, 0
 
-                    JP          i2c_ack             ; 19 (0FDC4h) - Send an i2c ACK.
-                    JP          set_usr_interrupt   ; 18 (0FDC7h) - Set the User interrupt vector. HL = 0 to clear, or address of user routine. HL= 0FFFFh to query.
-                    JP          bios_flash_write    ; 17 (0FDCAh) - Erase and write flash data. Data is written to 4K sectors, which are erased before writing.
-                    JP          get_disk_page       ; 16 (0FDCDh) - Get the page in RAM/ROM being used as the base for the drive selected by A, or zero if error.
-                    JP          rtc_get_time_hl     ; 15 (0FDD0h) - Get the time to the 7 bytes pointed to by HL. Returns carry set if sucessful
-                    JP          disp_char_bright    ; 14 (0FDD3h) - Set LED Digit A to brightness C
-                    JP          disp_bitmask        ; 13 (0FDD6h) - Directly write bitmask in HL to display column A
-                    JP          m_print_inline      ; 12 (0FDD9h) - Print the characters following the call instruction
-                    JP          get_page_mapping    ; 11 (0FDDCh) - Return the logical (cpu) page C (0-2) in A
-                    JP          set_page_mapping    ; 10 (0FDDFh) - Set the logical (cpu) page in A (0-2) to the physical (RAM/ROM) page in E
-                    JP          i2c_start           ; 9  (0FDE2h) - Sends I2C start sequence
-                    JP          i2c_stop            ; 8  (0FDE5h) - Sends I2C stop sequence
-                    JP          i2c_write           ; 7  (0FDE8h) - Write A as a byte to i2c bus. Carry SET if success. i2c_stop is not called.
-                    JP          i2c_read            ; 6  (0FDEBh) - Read byte from i2C into A, without ACK
-                    JP          i2c_write_to        ; 5  (0FDEEh) - Prepare to write to Device address H, Register L. Carry SET if success. i2c_stop is not called.
-                    JP          i2c_read_from       ; 4  (0FDF1h) - Read a byte int A from Device address H, Register L. Carry SET if success. i2c_stop is not called.
-                    JP          wait_for_key        ; 3  (0FDF4h) - Waits for until a key is pressed and released
-                    JP          play_note           ; 2  (0FDF7h) - Plays the note defined by DE (octave, note) and C (duration, tenths)
-                    JP          get_version         ; 1  (0FDFAh) - Returns the Bios version in A
-
+                    .INCLUDE "../micro/jump_table.asm"
 
 .IF $ > BIOS_TOP
     .ECHO "End of BIOS is too high ("
@@ -1692,5 +1637,4 @@ BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
 .ECHO BIOS_SPARE
 .ECHO "\n\n"
 
-                    .INCLUDE shared_data.asm
                     .END

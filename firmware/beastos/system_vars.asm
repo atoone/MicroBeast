@@ -26,19 +26,22 @@
 ; SOFTWARE.
 ;
 
-                    .ORG    0FF00h
+BIOS_IOBYTE         .EQU    03h
 
-; I2C/Port B routines
-port_b_mode         .BLOCK  1
-port_b_dir          .BLOCK  1
-port_b_data         .BLOCK  1
+MEMDISK_SECTORS     .EQU    26
+MEMDISK_TRACKS      .EQU    79
 
-boot_mode           .BLOCK  1              ; Set during boot. 
+BIOS_BOOT_TRACKS    .EQU    2
+BIOS_DMA_ADDRESS    .EQU    0080h   ; Default I/O buffer and command line storage
 
-;
-; Stuff
-timer               .BLOCK  4              ; 2 Words - counts up by 1 every 64th of a second. Rollover ~2 years.
-                        
+DRIVE_A_PAGE        .EQU    04h     ; Page 4 of ROM - offset 010000h
+DRIVE_B_PAGE        .EQU    25h     ; Page 5 of RAM
+
+CONSOLE_PAGE        .EQU    24h     ; Page 4 of RAM - Console emulation for non-VideoBeast systems
+
+
+                    .ORG    VAR_AREA_START
+                    
 ; General I/O
 ;
 ; This MUST start with keyboard_state, and will all be reset to zero when io_init is called

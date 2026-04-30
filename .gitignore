@@ -19,3 +19,7 @@ Backup
 Release
 *.exe
 *.vcxproj*
+
+# Sublime
+*.sublime-project
+*.sublime-workspace

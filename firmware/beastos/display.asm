@@ -48,16 +48,15 @@ disp_select_r       LD      A, DR_ADDRESS
 
 disp_config         LD      L, CONFIG_PAGE
                     CALL    disp_page
-                    CALL    i2c_start
                     LD      A, (display_address)
-                    CALL    i2c_address_w
-                    LD      A, 000h
-                    CALL    i2c_write
+                    LD      H, A
+                    LD      L, 0
+                    CALL    MBB_I2C_WR_ADDRESS
                     LD      A, 011h         ; Turn display on *Change to higher frequency switching to reduce board noise
-                    CALL    i2c_write
+                    CALL    MBB_I2C_WRITE
                     LD      A, 078h         ; 0.020mA
-                    CALL    i2c_write
-                    JP      i2c_stop
+                    CALL    MBB_I2C_WRITE
+                    JP      MBB_I2C_STOP
 
 ;
 ; Sets the brightness for the display
@@ -69,22 +68,22 @@ disp_brightness     CALL    disp_select_l
 _set_bright         LD      L, BRIGHT_PAGE
                     CALL    disp_page
                     LD      L, 12
-_bright_loop        CALL    i2c_start
+_bright_loop        PUSH    HL
                     LD      A, (display_address)
-                    CALL    i2c_address_w
-                    LD      A, L
-                    DEC     A
-                    SLA     A
-                    SLA     A
-                    SLA     A
-                    SLA     A
-                    CALL    i2c_write
+                    LD      H, A
+                    DEC     L
+                    SLA     L
+                    SLA     L
+                    SLA     L
+                    SLA     L
+                    CALL    MBB_I2C_WR_ADDRESS
+                    POP     HL
                     LD      H, 010h
 _bright_byte        LD      A, E
-                    CALL    i2c_write
+                    CALL    MBB_I2C_WRITE
                     DEC     H
                     JR      NZ, _bright_byte
-                    CALL    i2c_stop
+                    CALL    MBB_I2C_STOP
                     DEC     L
                     JR      NZ, _bright_loop
                     LD      L, LED_PAGE
@@ -95,24 +94,24 @@ _bright_byte        LD      A, E
 ; Call with page number in L
 ;
 ; Uses A, B, C, D
-disp_page           CALL    disp_unlock
-                    CALL    i2c_start
+disp_page           PUSH    HL
+                    CALL    disp_unlock 
                     LD      A, (display_address)
-                    CALL    i2c_address_w
-                    LD      A, 0FDh
-                    CALL    i2c_write
+                    LD      H, A
+                    LD      L, 0FDh
+                    CALL    MBB_I2C_WR_ADDRESS
+                    POP     HL
                     LD      A, L
-                    CALL    i2c_write
-                    JP      i2c_stop
+                    CALL    MBB_I2C_WRITE
+                    JP      MBB_I2C_STOP
 
-disp_unlock         CALL    i2c_start           ; Must be called before switching pages
-                    LD      A, (display_address)
-                    CALL    i2c_address_w
-                    LD      A, DISP_REG_CRWL
-                    CALL    i2c_write
+disp_unlock         LD      A, (display_address)
+                    LD      H, A
+                    LD      L, DISP_REG_CRWL
+                    CALL    MBB_I2C_WR_ADDRESS
                     LD      A, DISP_UNLOCK
-                    CALL    i2c_write
-                    JP      i2c_stop
+                    CALL    MBB_I2C_WRITE
+                    JP      MBB_I2C_STOP
 
 ; Set the character at column A to brightness C
 ;
@@ -129,22 +128,21 @@ _bright_left        LD      E, A
                     LD      L, BRIGHT_PAGE
                     CALL    disp_page
 
-                    CALL    i2c_start
                     LD      A, (display_address)
-                    CALL    i2c_address_w
-                    LD      A, E
-                    SLA     A
-                    SLA     A
-                    SLA     A
-                    SLA     A
-                    CALL    i2c_write
+                    LD      H, A
+                    LD      L, E
+                    SLA     L
+                    SLA     L
+                    SLA     L
+                    SLA     L
+                    CALL    MBB_I2C_WR_ADDRESS
                     POP     HL
                     LD      H, 010h
 _bright_char_loop   LD      A, L
-                    CALL    i2c_write
+                    CALL    MBB_I2C_WRITE
                     DEC     H
                     JR      NZ, _bright_char_loop
-                    CALL    i2c_stop
+                    CALL    MBB_I2C_STOP
 
                     LD      L, LED_PAGE
                     CALL    disp_page
@@ -183,23 +181,21 @@ _not_control        BIT     7, A
 ;
 ; Uses A, B, C, D, E
 disp_bitmask        PUSH    AF
-                    LD      B, DL_ADDRESS
+                    PUSH    HL
+                    LD      H, DL_ADDRESS
                     CP      12
                     JP      C, _disp_left
-                    LD      B, DR_ADDRESS
+                    LD      H, DR_ADDRESS
                     SUB     12
-_disp_left          LD      E, A
-                    CALL    i2c_start
-                    LD      A, B
-                    CALL    i2c_address_w
-                    LD      A, E
-                    SLA     A
-                    CALL    i2c_write
+_disp_left          LD      L, A
+                    SLA     L
+                    CALL    MBB_I2C_WR_ADDRESS
+                    POP     HL
                     LD      A, L
-                    CALL    i2c_write
+                    CALL    MBB_I2C_WRITE
                     LD      A, H
-                    CALL    i2c_write
-                    CALL    i2c_stop
+                    CALL    MBB_I2C_WRITE
+                    CALL    MBB_I2C_STOP
                     POP     AF
                     INC     A
                     RET

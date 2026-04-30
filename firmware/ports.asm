@@ -58,6 +58,38 @@ PIO_SET_INTERRUPT   .EQU  007h      ; Set interrupt control world. By itself, th
 PIO_ENABLE_INT      .EQU  080h      ; Enable interrupts on the given port, when OR'd with the PIO_SET_INTERRUPT control word.
 PIO_INT_MASK        .EQU  010h      ; When OR'd with the PIO_SET_INTERRUPT control word, the following word will enable interrupts for pins where the matching bit is zero
 
+;==================================== NIO ============================================
+NIO_A_DATA          .EQU  010h
+NIO_A_DIR           .EQU  012h
+
+NIO_B_DATA          .EQU  011h
+NIO_B_CTRL          .EQU  013h
+
+NIO_LCD_LOWER       .EQU  016h      ; Note: This is also decoded by Microbeast PIO A CTRL
+NIO_LCD_UPPER       .EQU  017h      ; Note: This is also decoded by Microbeast PIO B CTRL
+
+NIO_TEST_BITS       .EQU  04Fh      ; Note - MicroBeast PIO interprets this as mode 1, all inputs
+NIO_VALID_LOWER     .EQU  0D4h      ; Bit pattern returned by LCD translation..
+NIO_VALID_UPPER     .EQU  0FAh
+
+NIO_I2C_IDLE        .EQU  081h
+
+NI2C_DATA_BIT       .EQU    7           ; I2C on Port B CTRL
+NI2C_CLK_BIT        .EQU    0
+
+NI2C_DATA_MASK      .EQU    1 << NI2C_DATA_BIT
+NI2C_CLK_MASK       .EQU    1 << NI2C_CLK_BIT
+
+NI2C_REGISTER       .EQU    00h
+
+NAUDIO_REGISTER     .EQU    04h         ; Audio on Port B CTRL
+NAUDIO_MASK         .EQU    01h
+
+NINT_REGISTER       .EQU    02h         ; INT register controls interrupt inputs
+EXT_INT_MASK        .EQU    08h
+UART_INT_MASK       .EQU    10h
+RTC_INT_MASK        .EQU    20h
+
 ;================================== AUDIO ============================================
 ; Constants for Audio output
 AUDIO_PIO           .EQU  1         ; Audio on PIO (rev. 0.1 boards)
@@ -108,7 +140,7 @@ I2C_CLK_BIT             .equ    6
 I2C_DATA_MASK           .equ    1 << I2C_DATA_BIT
 I2C_CLK_MASK            .equ    1 << I2C_CLK_BIT
 
-; Display
+; LED Display
 ;==========
 DL_ADDRESS              .EQU    050h     ; Left  Matrix controller I2C address
 DR_ADDRESS              .EQU    053h     ; Right Matrix controller I2C address
@@ -151,3 +183,42 @@ RTC_64HZ_ENABLED        .EQU    044h    ; Value for RTC_REG_CTRL to enable 64Hz 
 RTC_WEEKDAY_RUNNING     .EQU    008h    ; Value for RTC_REG_WKDAY for normal running of clock
 
 RTC_SRAM_OPT            .EQU    020h    ; Start address of the 4 byte boot options settings in SRAM
+
+;
+; LCD Backlight module
+;
+BL_ADDRESS              .EQU    062h
+BL_REG_MODE1            .EQU    000h
+
+BL_SET_WAKE             .EQU    001h    ; Mode 1 value to wake the oscillator (default on startup is off)
+
+BL_REG_MODE2            .EQU    001h
+
+BL_SET_OPEN_DRAIN       .EQU    000h    ; Mode 2 value for open drain outputs
+
+BL_REG_LED0             .EQU    002h
+BL_REG_LED1             .EQU    003h
+BL_REG_LED2             .EQU    004h
+BL_REG_LED3             .EQU    005h
+
+BL_REG_LEDOUT           .EQU    008h
+
+BL_SET_LED0_OFF         .EQU    000h
+BL_SET_LED0_FULL        .EQU    001h
+BL_SET_LED0_PWM         .EQU    002h
+BL_SET_LED0_GROUP       .EQU    003h
+
+BL_SET_LED1_OFF         .EQU    000h
+BL_SET_LED1_FULL        .EQU    004h
+BL_SET_LED1_PWM         .EQU    008h
+BL_SET_LED1_GROUP       .EQU    00Ch
+
+BL_SET_LED2_OFF         .EQU    000h
+BL_SET_LED2_FULL        .EQU    010h
+BL_SET_LED2_PWM         .EQU    020h
+BL_SET_LED2_GROUP       .EQU    030h
+
+BL_SET_LED3_OFF         .EQU    000h
+BL_SET_LED3_FULL        .EQU    040h
+BL_SET_LED3_PWM         .EQU    080h
+BL_SET_LED3_GROUP       .EQU    0C0h

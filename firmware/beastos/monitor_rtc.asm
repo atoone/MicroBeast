@@ -31,52 +31,54 @@ _offset_date            .EQU    4
 _offset_month           .EQU    5
 _offset_year            .EQU    6
 
+;
+; Requires 8 byte data_scratch area to fetch and display time
 
-rtc_display_time        LD      HL, time_scratch
-                        CALL    rtc_get_time_hl
+rtc_display_time        LD      HL, data_scratch
+                        CALL    MBB_RTC_TIME
                         JP      NC, _get_error
 
                         LD      C, CARRIAGE_RETURN
-                        CALL    bios_conout
+                        CALL    BIOS_CONOUT
                         
-                        LD      A, (time_scratch+_offset_wkday)
+                        LD      A, (data_scratch+_offset_wkday)
                         LD      HL, weekdays
                         LD      C, A
 
-                        CALL    _search_word
+                        CALL    print_word_c
                         
 _get_date               CALL    _space
-                        LD      A, (time_scratch+_offset_date)
+                        LD      A, (data_scratch+_offset_date)
                         CALL    _two_chars_space
 
-                        LD      A, (time_scratch+_offset_month)
+                        LD      A, (data_scratch+_offset_month)
                         LD      HL, _months
                         BIT     4, A
                         JR      Z, _month_ok
                         SUB     6
 _month_ok               LD      C,A
 
-                        CALL    _search_word
+                        CALL    print_word_c
                         CALL    _space
                         LD      A, 20h
                         CALL    _two_chars
 
-                        LD      A, (time_scratch+_offset_year)
+                        LD      A, (data_scratch+_offset_year)
                         CALL    _two_chars_space
 
-                        LD      A, (time_scratch+_offset_hour)
+                        LD      A, (data_scratch+_offset_hour)
                         CALL    _two_chars_space
 
-                        LD      A, (time_scratch+_offset_min)
+                        LD      A, (data_scratch+_offset_min)
                         CALL    _two_chars_space
 
-                        LD      A, (time_scratch+_offset_sec)
+                        LD      A, (data_scratch+_offset_sec)
                         CALL    _two_chars
                         RET
 
-_two_chars_space       CALL    _two_chars
+_two_chars_space        CALL    _two_chars
 _space                  LD      C, ' '
-                        JP      bios_conout
+                        JP      BIOS_CONOUT
 
 _two_chars              LD      C,A
                         SRL     A
@@ -86,18 +88,18 @@ _two_chars              LD      C,A
                         ADD     A, '0'
                         PUSH    BC
                         LD      C, A
-                        CALL    bios_conout
+                        CALL    BIOS_CONOUT
                         POP     BC
                         LD      A,C
                         AND     0fh
                         ADD     A, '0'
                         LD      C, A
-                        JP      bios_conout
+                        JP      BIOS_CONOUT
 ;
 ; Search table pointed to by HL for the C'th word (1-based)
 ; Prints the chosen word to conout
 ;
-_search_word            DEC     C
+print_word_c            DEC     C
                         JR      NZ, _next_char
                         
 _print_word             LD      A, (HL)
@@ -106,7 +108,7 @@ _print_word             LD      A, (HL)
                         RET     Z
                         LD      C, A
                         PUSH    HL
-                        CALL    bios_conout
+                        CALL    BIOS_CONOUT
                         POP     HL
                         JR      _print_word
 
@@ -114,7 +116,7 @@ _next_char              LD      A, (HL)
                         INC     HL
                         AND     A
                         JR      NZ, _next_char
-                        JR      _search_word
+                        JR      print_word_c
 
 
 weekdays                .DB "Mon",0
@@ -139,8 +141,8 @@ _months                 .DB "Jan",0
                         .DB "Dec",0
 
 
-_get_error              CALL    i2c_stop
-                        CALL    m_print_inline 
+_get_error              CALL    MBB_I2C_STOP
+                        CALL    MBB_PRINT 
                         .DB     "Error getting time\r\n", 0
                         XOR     A
                         RET

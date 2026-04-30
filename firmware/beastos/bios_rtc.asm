@@ -29,7 +29,7 @@
 ; Set the initial time and start the clock
 ;
 ;
-rtc_init                CALL    m_print_inline
+rtc_init                CALL    MBB_PRINT
                         .DB     "\n\rCheck RTC",0
 
                         CALL    _read_seconds
@@ -37,12 +37,12 @@ rtc_init                CALL    m_print_inline
                         BIT     7, E                ; Check to see if the clock is running
                         RET     NZ                  ; Return if it is..
 
-_do_reset               CALL    m_print_inline
+_do_reset               CALL    MBB_PRINT
                         .DB     "\n\rReset RTC",0
 
                         LD      H, RTC_ADDRESS      ; Clock isn't running, reset to default time
                         LD      L, RTC_REG_SEC
-                        CALL    i2c_write_to
+                        CALL    MBB_I2C_WR_ADDRESS
                         JP      NC, rtc_ack_error
 
                         LD      HL, time_scratch
@@ -50,37 +50,37 @@ _reset_loop             LD      A, (HL)
                         INC     HL
                         CP      0ffh
                         JP      Z, _start_clock
-                        CALL    i2c_write
+                        CALL    MBB_I2C_WRITE
                         JP      NC, rtc_ack_error
                         JR      _reset_loop
 
-_start_clock            CALL    i2c_stop            ; Enable VBAT and start the clock
+_start_clock            CALL    MBB_I2C_STOP            ; Enable VBAT and start the clock
 
                         LD      H, RTC_ADDRESS      ; Enable VBAT
                         LD      L, RTC_REG_WKDAY
-                        CALL    i2c_read_from
+                        CALL    MBB_I2C_RD_ADDRESS
                         JP      NC, rtc_ack_error
                         LD      E, A
-                        CALL    i2c_stop
+                        CALL    MBB_I2C_STOP
                         SET     3, E
                         CALL    _pause
 
-                        CALL    i2c_write_to
+                        CALL    MBB_I2C_WR_ADDRESS
                         JP      NC, rtc_ack_error
                         LD      A, E
-                        CALL    i2c_write
+                        CALL    MBB_I2C_WRITE
                         JP      NC, rtc_ack_error
-                        CALL    i2c_stop
+                        CALL    MBB_I2C_STOP
 
                         CALL    _read_seconds
                         SET     7, E                ; Set bit 7 to enable clock
                         
-                        CALL    i2c_write_to
+                        CALL    MBB_I2C_WR_ADDRESS
                         JP      NC, rtc_ack_error
                         LD      A, E
-                        CALL    i2c_write
+                        CALL    MBB_I2C_WRITE
                         JP      NC, rtc_ack_error
-                        CALL    i2c_stop
+                        CALL    MBB_I2C_STOP
                         RET
 
 _pause                  LD      B, 0
@@ -92,14 +92,14 @@ _pause                  LD      B, 0
 ;
 _read_seconds           LD      H, RTC_ADDRESS      
                         LD      L, RTC_REG_SEC      
-                        CALL    i2c_read_from
+                        CALL    MBB_I2C_RD_ADDRESS
                         JP      NC, rtc_ack_error
                         LD      E, A
-                        JP     i2c_stop
+                        JP      MBB_I2C_STOP
 
-rtc_ack_error           CALL    i2c_stop
+rtc_ack_error           CALL    MBB_I2C_STOP
                         
-                        CALL    m_print_inline
+                        CALL    MBB_PRINT
                         .DB     "\n\rRTC Panic",0
                         RET
 
@@ -110,14 +110,14 @@ rtc_ack_error           CALL    i2c_stop
 rtc_get_time_hl         PUSH    HL
                         LD      H, RTC_ADDRESS
                         LD      L, RTC_REG_SEC
-                        CALL    i2c_read_from
+                        CALL    MBB_I2C_RD_ADDRESS
                         POP     BC
                         RET     NC
                         LD      HL, _masktable
                         JR      _store_time
 _get_loop               PUSH    BC 
-                        CALL    i2c_ack
-                        CALL    i2c_read
+                        CALL    MBB_I2C_ACK
+                        CALL    MBB_I2C_READ
                         POP     BC
 _store_time             AND     (HL)
                         LD      (BC), A
@@ -126,9 +126,54 @@ _store_time             AND     (HL)
                         LD      A, (HL)
                         AND     A
                         JR      NZ, _get_loop
-                        CALL    i2c_stop
+                        CALL    MBB_I2C_STOP
                         SCF
                         RET
+
+rtc_64Hz                LD      B, 4                ; Set RTC Coarse mode and Output Pin to Square wave - gives 64 Hz pulse
+_set_ctrl_loop          PUSH    BC
+                        LD      H, RTC_ADDRESS      
+                        LD      L, RTC_REG_CTRL
+                        CALL    MBB_I2C_WR_ADDRESS
+                        JR      NC, _rtc_ack_error
+                        LD      A, RTC_64HZ_ENABLED
+                        CALL    MBB_I2C_WRITE
+                        JR      NC, _rtc_ack_error
+                        XOR     A
+                        CALL    MBB_I2C_WRITE
+_rtc_ack_error          CALL    MBB_I2C_STOP
+
+                        LD      B, 0
+                        DJNZ    $
+
+                        CALL    _check_ctrl
+                        POP     BC
+                        RET     Z
+                        DJNZ    _set_ctrl_loop
+                        RET
+
+
+; Check that the control is set to coarse trim and 0 offset
+; Returns with Zero flag set if settings are good.
+;
+_check_ctrl             LD      H, RTC_ADDRESS      
+                        LD      L, RTC_REG_CTRL
+                        CALL    MBB_I2C_RD_ADDRESS
+                        LD      D, 2
+                        JR      NC, _ctrl_error
+                        LD      E, A
+                        CALL    MBB_I2C_ACK
+                        CALL    MBB_I2C_READ
+                        LD      D, A
+                        CALL    MBB_I2C_STOP
+                        LD      A, E
+                        LD      B, 4
+                        CP      RTC_64HZ_ENABLED
+                        RET     NZ
+_ctrl_error             LD      A, D
+                        AND     A
+                        RET 
+
 
 _masktable              .db     07fh        ; Seconds
                         .db     07fh        ; Minutes

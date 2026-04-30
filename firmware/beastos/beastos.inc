@@ -57,6 +57,9 @@ BDOS_WRITERANDOMZERO    .EQU    26h
 ; Direct access to bios entrypoints - use at own risk
 ;
 BIOS_START              .EQU    0EA00h           ; If (WHEN) the BIOS start address changes, this will be invalidated
+BIOS_TOP                .EQU    0FDFDh           ; End of BIOS (jump table). Interrupt vector follows, then system vars and stack
+
+JUMP_TABLE_SIZE         .EQU    21               ; Size of BeastOS jump table
 
 BIOS_BOOT               .EQU    BIOS_START
 BIOS_WBOOT              .EQU    BIOS_START+003h
@@ -247,3 +250,15 @@ MBB_FLASH_WRITE         .EQU    0FDCAh
 ;       The address of the current user interrupt routine, or zero if none is configured.
 ;
 MBB_SET_USR_INT         .EQU    0FDC7h
+
+; CALL MBB_RESET_HARDWARE - Set up default page mapping and interrupt handler
+; Sets up default page mappings for banks 0-2, configures the interrupt vector in bank 3 and 
+; initialises the screen. This should restore the core BIOS functionality if another program
+; has altered the configuration - but assumes the BIOS is resident in bank 3 to function.
+;
+MBB_RESET_HARDWARE      .EQU    0FDC1h
+
+; CALL MBB_LOAD_CCP - Load the CP/M CCP
+; This loads the CCP from the boot sector of the default drive into the correct location. It can be called
+; when a hard boot is required (ie. call BIOS_BOOT rather than BIOS_WBOOT)
+MBB_LOAD_CCP            .EQU    0FDBEh

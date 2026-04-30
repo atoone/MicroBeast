@@ -25,9 +25,40 @@
 ; SOFTWARE.
 ;
                     .MODULE  boot_sequence
+
+JUMP_TABLE_START    .EQU  (BIOS_TOP-(3*JUMP_TABLE_SIZE))
+JUMP_TABLE_LENGTH   .EQU  (3*JUMP_TABLE_SIZE)
+
 ;
-; TODO: PIO setup should happen after the initial beep. Do it here for now, until new boards are available.
+; Nanobeast detect
+; 
+                    LD      A, NIO_TEST_BITS
+                    OUT     (NIO_LCD_LOWER), A
+                    OUT     (NIO_LCD_UPPER), A
+                    IN      A, (NIO_LCD_LOWER)
+                    CP      NIO_VALID_LOWER
+                    JR      NZ, _is_microbeast
+                    IN      A, (NIO_LCD_UPPER)
+                    CP      NIO_VALID_UPPER
+                    JR      NZ, _is_microbeast
 ;
+; Initialise ports for NanoBeast
+;
+                    LD      D, DEVICE_NANO
+                    JR      _boot_beep
+
+                    LD      A, 0FFh                 ; Port A to all inputs
+                    OUT     (NIO_A_DIR), A
+
+                    LD      A, NINT_REGISTER        ; Clear the interrupt register
+                    OUT     (NIO_B_CTRL), A
+
+;
+; Initialise ports for MicroBeast
+;
+
+_is_microbeast      LD      D, DEVICE_MICRO
+
                     LD      A, PIO_SET_INTERRUPT    ; Ports A/B Interrupt control - no interrupts
                     OUT     (PIO_A_CTRL), A         ; Set control twice in case a reset interrupted a control sequence
                     OUT     (PIO_A_CTRL), A
@@ -42,14 +73,53 @@
 
                     LD      A, PIO_MODE_3           ; Port B mode 3
                     OUT     (PIO_B_CTRL), A
-                    LD      A, PORT_B_IOMASK        ; All inputs, apart from bit 4 (audio out)
+                    LD      A, PORT_B_IOMASK        ; All inputs, apart from audio bit if running MicroBeast rev 0.1 boards
                     OUT     (PIO_B_CTRL), A
 
                     LD     HL, 0E80h                ; Approx middle C
+
+                    ;
+                    ; This is called again if UART and Memory initialisation fails - so they MUST preserve register D
+                    ;
+_boot_beep          LD     A, D
+                    CP     DEVICE_MICRO
+                    JR     Z, _micro_beep
+
 ;
-; Beep to show we've booted
+; NanoBeast beep routine
 ;
-_boot_beep          IN      A, (AUDIO_PORT)         ; Check the state of the audio port,,
+_nano_beep          LD      A, NAUDIO_REGISTER                 
+                    LD      E, 100                  ; 100 cycles = 1/3 of a sec
+_nbeep_loop         XOR     NAUDIO_MASK
+                    OUT     (NIO_B_CTRL), A
+
+                    LD      C, L
+_nbeep_delay0       LD      B, H
+_nbeep_delay1       DJNZ    _nbeep_delay1            ; 13 * (count-2) + 8
+                    DEC     C
+                    JR      NZ, _nbeep_delay0
+
+                    XOR     NAUDIO_MASK
+                    OUT     (NIO_B_CTRL), A
+
+                    LD      C, L
+_nbeep_delay2       LD      B, H
+_nbeep_delay3       DJNZ    _nbeep_delay3            ; 13 * (count-2) + 8
+                    DEC     C
+                    JR      NZ, _nbeep_delay2      
+
+                    DEC     E
+                    JR      NZ, _nbeep_loop
+;
+; Reset D to DEVICE_NANO to show we're a NanoBeast today
+;                    
+                    LD      D, DEVICE_NANO
+                    JR      _uart_init
+
+;
+; MicroBeast beep routine
+;
+_micro_beep         IN      A, (AUDIO_PORT)         ; Check the state of the audio port,,
                     LD      D, A                 
                     LD      E, 100                  ; 100 cycles = 1/3 of a sec
 _beep_loop          LD      A, D
@@ -75,10 +145,16 @@ _beep_delay3        DJNZ    _beep_delay3            ; 13 * (count-2) + 8
                     JR      NZ, _beep_loop
 
 ;
+; Reset D to DEVICE_MICRO to show we're a MicroBeast today
+;
+                    LD      D, DEVICE_MICRO
+
+
+;
 ; Now initialise the UART
 ;
 ;
-                    LD      BC, UART_19200 | (UART_MODE_NO_FLOW << 8)  ;;; TODO This is sooooo wrong - sets C (divisor) to 38 
+_uart_init          LD      BC, UART_19200 | (UART_MODE_NO_FLOW << 8)
                     LD      A, 80h                      ; Divisor Latch Setting Mode
                     OUT     (UART_LINE_CTRL), A         ;  - entered by writing 1 to bit 7 of LCR
                     NOP
@@ -195,8 +271,10 @@ _uart_ready5
 ;
                     LD      A, ROM_PAGE_0
                     OUT     (IO_MEM_0), A           ; Page 0 is Flash 0
+                    LD      A, RAM_PAGE_0
+                    OUT     (IO_MEM_1), A           ; Page 1 is RAM 0
                     LD      A, RAM_PAGE_3
-                    OUT     (IO_MEM_3), A           ; Page 3 is RAM 0
+                    OUT     (IO_MEM_3), A           ; Page 3 is RAM 3
 
                     LD      A, IO_MEM_ENABLE
                     OUT     (IO_MEM_CTRL), A
@@ -216,7 +294,31 @@ _uart_ready5
 
                     JP      NZ, _boot_beep
 
+                    LD      A, D
+                    LD      (device_id), A
+
+                    LD      HL, 0                   ; Copy Flash 0 to RAM 0
+                    LD      DE, 4000h
+                    LD      BC, 4000h
+                    LDIR 
+
+                    LD      A, RAM_PAGE_0           ; Now we're running from RAM
+                    OUT     (IO_MEM_0), A
+
                     CALL    uart_init               ; Reinitialise the UART to make sure we've not missed anything
+
+                    CALL    uart_inline
+                    .DB     "RAM OK\r\n", 0
+
+                    LD      HL, micro_jump_table    ; Install the correct jump table so system calls are correctly invoked                 
+                    LD      A, (device_id)
+                    CP      DEVICE_MICRO
+                    JR      Z, _micro_jump
+                    LD      HL, nano_jump_table
+
+_micro_jump         LD      DE, JUMP_TABLE_START
+                    LD      BC, JUMP_TABLE_LENGTH
+                    LDIR
 ;
 ; Now check keys all read as un-pressed, apart from DELETE
 ;
@@ -265,26 +367,40 @@ _key_ok             RRC     B
 ;
 ; At this stage we should have a working UART and memory.. we can start calling routines..
 ;
-                    CALL    uart_inline
-                    .DB     "MicroBeast starting...\n\r",0
+                    XOR     A
+                    LD      (display_detect), A
 
-                    JR      _continue
+                    LD      A, (device_id)
+                    CP      DEVICE_MICRO
+                    JR      Z, start_micro
+
+                    CALL    uart_inline
+                    .DB     "NanoBeast starting...\n\r",0
+
+                    CALL    uart_inline
+                    .DB     "Detected NIO\r\n",0            ; We already know this
+
+                    CALL    ni2c_bus_reset
+                    JR      check_devices
 
 panic               CALL    uart_inline
-                    .DB     "Panic\n\r",0
+                    .DB     "\n\rPanic :",0
                     LD      A, H
                     CALL    uart_hex
                     LD      A, L
                     CALL    uart_hex
 _beep               LD      DE, 0400h
                     LD      C, 5
-                    CALL    play_note
+                    CALL    MBB_PLAY_NOTE
                     LD      DE, 0506h
                     LD      C, 5
-                    CALL    play_note
+                    CALL    MBB_PLAY_NOTE
                     JR      _beep
 
-_continue           CALL    init_portb
+start_micro         CALL    uart_inline
+                    .DB     "MicroBeast starting...\n\r",0
+
+                    CALL    init_portb
                     CALL    i2c_bus_reset
 ;
 ; Now: Port B should be all inputs, so D7 (i2c data) should be high
@@ -304,37 +420,68 @@ _continue           CALL    init_portb
                     CALL    uart_inline
                     .DB     "Detected PIO\r\n",0
 
+                    CALL    i2c_bus_reset
+                    
 ;
 ; All good, let's see what's on the bus...
 ;
-                    CALL    i2c_bus_reset
+check_devices       CALL    MBB_I2C_START
+                    LD      A, DL_ADDRESS << 1
+                    CALL    MBB_I2C_WRITE
+                    JR      NC, _no_led1
+                    CALL    MBB_I2C_STOP
 
-                    CALL    i2c_start
-                    LD      A, DL_ADDRESS
-                    CALL    i2c_address_w
-                    LD      HL, PANIC_0001
-                    JR      NC, panic
-                    CALL    i2c_stop
+                    LD      HL, display_detect
+                    INC     (HL)
 
                     CALL    uart_inline
                     .DB     "Detected Display 1/2\r\n", 0
 
-                    CALL    i2c_start
-                    LD      A, DR_ADDRESS
-                    CALL    i2c_address_w
-                    LD      HL, PANIC_0002
-                    JP      NC, panic
-                    CALL    i2c_stop
+_no_led1            CALL    MBB_I2C_START
+                    LD      A, DR_ADDRESS << 1
+                    CALL    MBB_I2C_WRITE
+                    JR      NC, _no_led2
+                    CALL    MBB_I2C_STOP
 
                     CALL    uart_inline
                     .DB     "Detected Display 2/2\r\n", 0
 
-                    CALL    i2c_start
-                    LD      A, RTC_ADDRESS
-                    CALL    i2c_address_w
-                    LD      HL, PANIC_0003
+                    LD      HL, display_detect
+                    INC     (HL)
+
+_no_led2            LD      A, (display_detect)
+                    LD      HL, PANIC_0001              ; Panic if only 1 of 2 display drivers found
+                    CP      1
+                    JP      Z, panic
+
+                    AND     A
+                    JR      NZ, _both_leds
+
+                    LD      A, (device_id)
+                    LD      HL, PANIC_0002              ; Panic if no LEDs but this is a microbeast
+                    CP      DEVICE_MICRO
+                    JP      Z, panic
+
+_both_leds          CALL    MBB_I2C_START
+                    LD      A, BL_ADDRESS << 1
+                    CALL    MBB_I2C_WRITE
+                    JR      NC, _no_lcd
+                    CALL    MBB_I2C_STOP
+
+                    LD      A, (display_detect)
+                    OR      DISPLAY_LCD
+                    LD      (display_detect), A
+
+                    CALL    uart_inline
+                    .DB     "Detected LCD\r\n", 0
+
+_no_lcd             
+                    CALL    MBB_I2C_START
+                    LD      A, RTC_ADDRESS << 1
+                    CALL    MBB_I2C_WRITE
+                    LD      HL, PANIC_0003              ; Panic if no RTC
                     JP      NC, panic
-                    CALL    i2c_stop
+                    CALL    MBB_I2C_STOP
 
                     CALL    uart_inline
                     .DB     "Detected RTC\r\n", 0

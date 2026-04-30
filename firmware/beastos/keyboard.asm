@@ -226,82 +226,6 @@ read_character      LD      A, (input_size)
                     OR      A
                     EI
                     RET
-                    
-;;
-; D = Octave 2-6
-; E = Note 0-11
-; C = 1-15 duration, ~tenths of a second
-;
-play_note           LD      A, 7
-                    SUB     D
-                    LD      D, 0
-                    LD      HL, _note_table
-                    ADD     HL, DE
-                    ADD     HL, DE
-
-                    LD      E, (HL)
-                    INC     HL
-                    LD      D, (HL)
-
-_note_octave        AND     A
-                    JR      Z, _note_shifted
-
-                    SRL     D
-                    RR      E
-                    DEC     A
-                    JR      _note_octave
-
-_note_shifted       LD      B, C
-                    LD      C, A        ; A is zero from previous octave calc
-                    SLA     B    
-                    SLA     B    
-                    SLA     B    
-                    SLA     B           ; Now BC = 4096 * C
-
-                    IN      A, (AUDIO_PORT)
-                    LD      (_tone_val+1), A
-                    DI
-
-_tone_loop          ; 186 T-states          
-                    ADD     HL, DE              ; 11
-                    RRA                         ; 4   Carry into bit 7
-                    SRA     A                   ; 8   Copy to bit 6
-                    SRA     A                   ; 8   ..5
-                    SRA     A                   ; 8   ..4
-                    SRA     A                   ; 8   ..3
-
-                    AND     AUDIO_MASK          ; 7
-_tone_val           XOR     0                   ; 7
-                    LD      (_tone_val+1), A    ; 13
-
-                    OUT     (AUDIO_PORT),A      ; 12
-
-                    LD      A, B                ; 4
-                    LD      B, 5                ; 7
-                    DJNZ    $                   ; 4 * 13 + 7 = 59
-                    LD      B, A                ; 4
-
-                    DEC     BC                  ; 6
-                    LD      A, B                ; 4
-                    OR      C                   ; 4
-                    JR      NZ, _tone_loop      ; 12
-
-                    EI
-                    RET
-
-_note_table         .DW 6379
-                    .DW 6757
-                    .DW 7158
-                    .DW 7585
-                    .DW 8035
-                    .DW 8512
-                    .DW 9023
-                    .DW 9553
-                    .DW 10124
-                    .DW 10730
-                    .DW 11360
-                    .DW 12045
-                    .DW 0
 
 ;
 ; Get the next key press
@@ -332,45 +256,6 @@ wait_no_keys        CALL    read_character
                     CP      03Fh
                     JR      NZ, wait_no_keys
                     RET
-
-; Non-printing key codes
-;
-KEY_ENTER       .EQU    13
-KEY_DELETE      .EQU    127
-KEY_CTRL_C      .EQU    03h
-KEY_CTRL_E      .EQU    05h
-
-KEY_CTRL_P      .EQU    10h
-KEY_CTRL_R      .EQU    12h
-KEY_CTRL_S      .EQU    13h
-KEY_CTRL_U      .EQU    15h
-KEY_CTRL_X      .EQU    18h
-KEY_CTRL_Z      .EQU    1Ah
-KEY_ESCAPE      .EQU    1Bh
-
-KEY_BACKSPACE   .EQU    08h
-
-; Modifier and special keys have key codes with the top bit set..
-;
-KEY_UP          .EQU    128
-KEY_DOWN        .EQU    129
-KEY_LEFT        .EQU    130
-KEY_RIGHT       .EQU    131
-KEY_SHIFT       .EQU    132
-KEY_CTRL        .EQU    134
-
-; 144 = 90h
-;
-CTRL_KEY_MASK   .EQU    0F8h
-CTRL_KEY_CHECK  .EQU    090h
-
-KEY_CTRL_UP     .EQU    144             ; These characters start on an exact multiple of 8 so they 
-KEY_CTRL_DOWN   .EQU    145             ; Can easily be detected
-KEY_CTRL_LEFT   .EQU    146
-KEY_CTRL_RIGHT  .EQU    147
-KEY_CTRL_ENTER  .EQU    148
-KEY_CTRL_SPACE  .EQU    149 
-KEY_CTRL_D      .EQU    150
 
 _keyboard_size  .EQU    48
 

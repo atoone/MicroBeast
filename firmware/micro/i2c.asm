@@ -124,7 +124,7 @@ i2c_write_to        CALL    i2c_start
                     CALL    i2c_address_w
                     RET     NC
                     LD      A, L
-                    JP      i2c_write
+                    JR      i2c_write
 
 ; Start reading from device address held in A
 ;
@@ -189,7 +189,7 @@ _fast_loop          LD      A, H
 
                     POP     HL
 
-                    BIT     I2C_DATA_BIT, D     ; D contains acknowledge bit
+                    AND     I2C_DATA_MASK   ; A contains acknowledge bit
                     SCF
                     RET     Z               ; Return with carry set if acknowledge bit is low
 
@@ -220,19 +220,11 @@ _data_high          RL      C
 ;
 i2c_ack             CALL    i2c_sda_low
                     CALL    i2c_scl_cycle
-                    JR      i2c_sda_high
+                    ; Fall through to i2c_sda_high
 
 ; SCL/SDA toggle routines
 ;
 ; All use A
-i2c_scl_low         LD      A, (port_b_mode)
-                    OUT     (PIO_B_CTRL), A
-
-                    LD      A, (port_b_dir)
-                    RES     I2C_CLK_BIT, A
-                    OUT     (PIO_B_CTRL), A
-                    LD      (port_b_dir), A
-                    RET
 
 i2c_sda_high        LD      A, (port_b_mode)
                     OUT     (PIO_B_CTRL), A
@@ -243,11 +235,11 @@ i2c_sda_high        LD      A, (port_b_mode)
                     LD      (port_b_dir), A
                     RET
 
-i2c_sda_low         LD      A, (port_b_mode)
+i2c_scl_low         LD      A, (port_b_mode)
                     OUT     (PIO_B_CTRL), A
 
                     LD      A, (port_b_dir)
-                    RES     I2C_DATA_BIT, A
+                    RES     I2C_CLK_BIT, A
                     OUT     (PIO_B_CTRL), A
                     LD      (port_b_dir), A
                     RET
@@ -257,6 +249,15 @@ i2c_scl_high        LD      A, (port_b_mode)
 
                     LD      A, (port_b_dir)
                     SET     I2C_CLK_BIT, A
+                    OUT     (PIO_B_CTRL), A
+                    LD      (port_b_dir), A
+                    RET
+
+i2c_sda_low         LD      A, (port_b_mode)
+                    OUT     (PIO_B_CTRL), A
+
+                    LD      A, (port_b_dir)
+                    RES     I2C_DATA_BIT, A
                     OUT     (PIO_B_CTRL), A
                     LD      (port_b_dir), A
                     RET

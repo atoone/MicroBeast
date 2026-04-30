@@ -26,21 +26,29 @@
 ;
                     .MODULE  main
 
+                    .INCLUDE "beastos.inc"
+                    .INCLUDE  "../common_data.asm"
+                    .INCLUDE "system_vars.asm"
+                    .INCLUDE "../ports.asm"
+                    .INCLUDE "../keyboard.inc"
+
 MONITOR_START       .EQU   0DB00h
 
                     .ORG   MONITOR_START
-                    CALL   configure_hardware           ; Interrupts are configured and enabled here
+                    CALL   MBB_RESET_HARDWARE           ; Interrupts are configured and enabled here
 
                     LD      A, (boot_mode)
                     AND     BOOT_TTY_INPUT
                     LD      A, 1
                     JR      Z, _set_iobyte
                     XOR     A
-_set_iobyte         LD      (iobyte), A
+_set_iobyte         LD      (BIOS_IOBYTE), A
 
                     LD      A, DRIVE_B_PAGE
                     LD      (drive_b_mem_page), A
 
+                    LD      HL, (0FDFEh)
+                    LD      (_restore_int), HL          ; !!! Self modifying code 
 _clock_check        LD      HL, timer_int
                     LD      (0FDFEh), HL
 
@@ -53,7 +61,7 @@ _clock_check        LD      HL, timer_int
                     OR      B
                     JR      NZ, _clock_detected
 
-_no_clock           CALL    m_print_inline
+_no_clock           CALL    MBB_PRINT
                     .DB     ".", 0
 
                     CALL    _do_reti
@@ -77,11 +85,11 @@ _clock_detected     LD      A, 7
                     POP     DE
                     CALL    de_to_bcd
 
-                    LD      A, (bcd_scratch)         ; Units
+                    LD      A, (data_scratch)         ; Units
                     CP      6
                     JR      C, _display_speed
 
-                    LD      HL, (bcd_scratch+1)
+                    LD      HL, (data_scratch+1)
                     LD      B,  4
 
 _increment_bcd      LD      A, (HL)
@@ -94,26 +102,27 @@ _increment_bcd      LD      A, (HL)
                     INC     HL
                     DJNZ    _increment_bcd
 
-_display_speed      LD      A, (bcd_scratch+3)
+_display_speed      LD      A, (data_scratch+3)
                     AND     A
                     JR      Z, _skip_leading
                     ADD     A, '0'
                     LD      (_speed_value),A
-_skip_leading       LD       A, (bcd_scratch+2)
+_skip_leading       LD       A, (data_scratch+2)
                     ADD     A, '0'
                     LD      (_speed_value+1), A
-                    LD      A, (bcd_scratch+1)
+                    LD      A, (data_scratch+1)
                     ADD     A, '0'
                     LD      (_speed_value+3), A
 
                     LD      BC, 30h
                     CALL    pause_for_ticks
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     NEWLINE, CARRIAGE_RETURN, "Clock speed "
 _speed_value        .DB     " 0,0Mhz", 0
 
-                    LD      HL, interrupt_handler
+_restore_int        .EQU    $+1
+                    LD      HL, timer_int               ; !!! Self modifying code 
                     LD      (0FDFEh), HL
 
                     ; Everything is now set up and running as we expect. Now handle boot options.
@@ -122,12 +131,11 @@ _speed_value        .DB     " 0,0Mhz", 0
                     AND     BOOT_NO_LED
                     JR      Z, _keep_led_on
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     NEWLINE, CARRIAGE_RETURN, "LED Off", 0
 
-                    LD      A, (default_screen_flags)
+                    LD      A, (console_flags)
                     OR      CFLAGS_LED_OFF
-                    LD      (default_screen_flags), A
                     LD      (console_flags), A
 
 _keep_led_on        LD      A, (boot_mode)
@@ -137,39 +145,39 @@ _keep_led_on        LD      A, (boot_mode)
                     LD      BC, 60h
                     CALL    pause_for_ticks
 
-                    CALL    m_print_inline
-                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.7", 0
+                    CALL    MBB_PRINT
+                    .DB     NEWLINE, CARRIAGE_RETURN, "MicroBeast Monitor 1.8", 0
 
                     LD      BC, 60h
                     CALL    pause_for_ticks
 
                     LD      C, NEWLINE
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
 
 _monitor_menu       CALL    rtc_display_time
 
                     LD      BC, 040h
                     CALL    pause_for_ticks
 
-_monitor_read       CALL    bios_conist
+_monitor_read       CALL    BIOS_CONIST
                     AND     A
                     JR      Z, _monitor_menu
 
-                    CALL    bios_conin
+                    CALL    BIOS_CONIN
 
                     LD      HL, main_menu
                     CALL    start_menu
                     JR      _monitor_menu
 
 
-boot_cpm            CALL    m_print_inline
+boot_cpm            CALL    MBB_PRINT
                     .DB     NEWLINE, CARRIAGE_RETURN, "Format RAM disk", 0
 
                     CALL    format_memdisk
 
-boot_without_format LD      HL, bios_boot
+boot_without_format LD      HL, BIOS_BOOT
                     PUSH    HL
-                    JP      load_ccp
+                    JP      MBB_LOAD_CCP
 
 
 main_menu           .DB     "Select action", 0
@@ -189,9 +197,6 @@ main_menu           .DB     "Select action", 0
                     .DW     set_time
                     .DB     "Set Time", 0
                     .DW     0
-
-
-                    .INCLUDE monitor_dates.asm
 
 
 ymodem_loader       XOR     A
@@ -229,7 +234,7 @@ ymodem_loader       XOR     A
                     LD      (_packet_err_code), A
 
                     PUSH    HL
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, "ERROR: ", 0
 
                     POP     HL
@@ -237,10 +242,10 @@ ymodem_loader       XOR     A
 _ymodem_err_loop    LD      A, (HL)
                     INC     HL
                     AND     A
-                    JP      Z, bios_conin                   ; Wait for a key then go to main menu..
+                    JP      Z, BIOS_CONIN                   ; Wait for a key then go to main menu..
                     LD      C, A
                     PUSH    HL
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     POP     HL
                     JR      _ymodem_err_loop
 
@@ -265,19 +270,19 @@ _y_msg_no_dest      .DB     "No destination", ESCAPE_CHAR, "K", 0
 _y_msg_send         .DB     "Send Timeout", ESCAPE_CHAR, "K", 0
 _y_msg_files        .DB     "Multiple files", ESCAPE_CHAR, "K", 0
 
-_ymodem_success     CALL    m_print_inline           
+_ymodem_success     CALL    MBB_PRINT           
                     .DB     CARRIAGE_RETURN, "OK ",0
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_length_high)
                     CP      0FFh
                     JR      Z, _ymodem_no_high
                     ADD     A, '0'
                     LD      C, A
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
 _ymodem_no_high     LD      A, (MONITOR_START-YMODEM_INFO+ym_length_mid)
                     CALL    hex_out
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_length_low)
                     CALL    hex_out
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     " BYTES @ ", 0
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_file_mode)
                     RLA
@@ -285,7 +290,7 @@ _ymodem_no_high     LD      A, (MONITOR_START-YMODEM_INFO+ym_length_mid)
                     RRA
                     CALL    hex_out
                     LD      C, '/'
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_dest_high)
                     SUB     40h
                     JR      _ymodem_addr
@@ -294,13 +299,13 @@ _ymodem_show_addr   LD      A, (MONITOR_START-YMODEM_INFO+ym_dest_high)
 _ymodem_addr        CALL    hex_out
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_dest_low)
                     CALL    hex_out
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     ESCAPE_CHAR, "K", 0
-_ymodem_waitkey     CALL    bios_conist                  
+_ymodem_waitkey     CALL    BIOS_CONIST                  
                     AND     A
                     JR      Z, _ymodem_waitkey
 
-                    CALL    bios_conin
+                    CALL    BIOS_CONIN
 
 
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_file_mode)      ; Do something with the file.
@@ -322,7 +327,7 @@ _ymodem_exec        LD      HL, (MONITOR_START-YMODEM_INFO+ym_dest_low)
                     PUSH    HL
 _ymodem_exit        RET
 
-_ymodem_flash       CALL    m_print_inline
+_ymodem_flash       CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, NEWLINE, "Page 00-1f >", ESCAPE_CHAR, "K", 0
 
                     LD      B, 2
@@ -332,13 +337,13 @@ _ymodem_flash       CALL    m_print_inline
                     CP      1fh
                     JR      NC, _ymodem_flash
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     " Y/N?", 0
-                    CALL    bios_conin
+                    CALL    BIOS_CONIN
                     CP      'y'
                     JR      NZ, _ymodem_handle_page
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, NEWLINE, "Writing", ESCAPE_CHAR, "K", 0
 
                     LD      A, (hex_input_result)
@@ -361,14 +366,14 @@ _next_page          LD      (_ymodem_page), A
                     OR      C
                     JR      Z, _flash_done
                     LD      HL, 4000h
-                    CALL    flash_write
+                    CALL    MBB_FLASH_WRITE
 
 _flash_done         LD      A, RAM_PAGE_0
                     OUT     (IO_MEM_0), A
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, NEWLINE, "Done ", ESCAPE_CHAR, "K", 0           
-                    JP      bios_conin
+                    JP      BIOS_CONIN
 
 _full_page          LD      BC, 0040h
                     XOR     A
@@ -377,7 +382,7 @@ _full_page          LD      BC, 0040h
                     LD      HL, 4000h
                     LD      B, H
                     LD      C, L
-                    CALL    flash_write
+                    CALL    MBB_FLASH_WRITE
                     INC     D
                     LD      A,(_ymodem_page)
                     INC     A
@@ -390,9 +395,9 @@ _ymodem_firmware    LD      A, (MONITOR_START-YMODEM_INFO+ym_length_high)
                     CP      040h
                     JR      NC, _not_firmware
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, "Write firmware, Y/N?", ESCAPE_CHAR, "K", 0
-                    CALL    bios_conin
+                    CALL    BIOS_CONIN
                     CP      'y'
                     JP      NZ, _ymodem_handle_page
 
@@ -402,17 +407,17 @@ _ymodem_firmware    LD      A, (MONITOR_START-YMODEM_INFO+ym_length_high)
                     
                     LD      HL, 4000h
                     LD      D, 0
-                    CALL    flash_write
+                    CALL    MBB_FLASH_WRITE
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, NEWLINE, "Done ", ESCAPE_CHAR, "K", 0
                     LD      DE, (MONITOR_START-YMODEM_INFO+ym_length_low)
                     CALL    hex_word
-                    JP      bios_conin
+                    JP      BIOS_CONIN
 
-_not_firmware       CALL    m_print_inline
+_not_firmware       CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, NEWLINE, "Too large", ESCAPE_CHAR, "K", 0
-                    JP      bios_conin
+                    JP      BIOS_CONIN
 
 
 _ymodem_address     .DW     0
@@ -451,11 +456,11 @@ ymodem_menu         .DB     "Download options", 0
 _ymodem_from_file   LD      DE, 0FFFFh
                     LD      (_ymodem_address), DE
                     LD      (_ymodem_page), DE
-_ymodem_transfer    CALL    m_print_inline
+_ymodem_transfer    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, "Start transfer", ESCAPE_CHAR, "K", 0
                     RET
 
-_ymodem_logical     CALL    m_print_inline
+_ymodem_logical     CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, "Address 0000-FFFF >", ESCAPE_CHAR, "K", 0
                     LD      B, 4
                     CALL    hex_input
@@ -469,14 +474,14 @@ _ymodem_set_and_go  LD      DE, (hex_input_result)
                     LD      (_ymodem_set), A
                     JR      _ymodem_transfer
 
-_ymodem_physical    CALL    m_print_inline
+_ymodem_physical    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, "Page 20-3F >", ESCAPE_CHAR, "K", 0
                     LD      B, 2
                     CALL    hex_input
                     CALL    delete_or_enter
                     LD      A, (hex_input_result)
                     LD      (_ymodem_page), A
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, "Offset 0000-3FFF >", ESCAPE_CHAR, "K", 0
                     LD      B, 4
                     CALL    hex_input
@@ -495,10 +500,10 @@ edit_digit          .DW     0
 
 memory_view         CALL    display_mem_row
 
-_wait_key           CALL    bios_conist
+_wait_key           CALL    BIOS_CONIST
                     AND     A
                     JR      Z, _wait_key
-                    CALL    bios_conin
+                    CALL    BIOS_CONIN
                     CALL    translate_cursors
 
                     CP      KEY_UP
@@ -540,7 +545,7 @@ _input_address      XOR     A
                     LD      (monitor_mode), A
                     CALL    display_mem_row
                     LD      C, CARRIAGE_RETURN
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
 
                     LD      B, 4
                     CALL    hex_input
@@ -550,7 +555,7 @@ _input_address      XOR     A
 
 execute             XOR     A
                     LD      (edit_col), A
-execute_col         CALL    m_print_inline
+execute_col         CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, ESCAPE_CHAR, 'b', CPM_NUM+15, "Execute from ", 0
                     LD      HL, _exec_done
                     PUSH    HL
@@ -563,10 +568,10 @@ execute_col         CALL    m_print_inline
                     PUSH    HL
                     EX      DE, HL
                     CALL    hex_word
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     " Y/N?", ESCAPE_CHAR, "K", 0
 
-_exec_loop          CALL    bios_conin
+_exec_loop          CALL    BIOS_CONIN
                     CP      'y'
                     JR      Z, _exec_go
                     CP      'n'
@@ -575,18 +580,18 @@ _exec_loop          CALL    bios_conin
                     POP     HL
                     JP      memory_view
 
-_exec_go            CALL    m_print_inline
+_exec_go            CALL    MBB_PRINT
                     .DB     NEWLINE, CARRIAGE_RETURN, "Running", ESCAPE_CHAR, "K", 0
                     RET
 
 _exec_done          PUSH    AF
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     NEWLINE, CARRIAGE_RETURN, "Done. A=",0
                     POP     AF
                     CALL    hex_out
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     ESCAPE_CHAR, "K", 0
-                    CALL    bios_conin ;pause for a key, then return to memory edit at the execution location
+                    CALL    BIOS_CONIN ;pause for a key, then return to memory edit at the execution location
 
 
 edit_memory         XOR     A
@@ -608,7 +613,7 @@ _address_hidden     LD      A, (cursor_row)
                     ADD     A, 32
                     LD      (_edit_set_col), A
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     ESCAPE_CHAR, 'b', CPM_NUM+8         ; Set the correct brightness
                     .DB     ESCAPE_CHAR, 'Y'                    ; And position the cursor
 _edit_set_row       .DB     0
@@ -618,7 +623,7 @@ _edit_set_col       .DB     0
                     LD      DE, 0200h
 _edit_next_digit    LD      (edit_digit), DE
 
-_edit_input         CALL    bios_conin
+_edit_input         CALL    BIOS_CONIN
                     CALL    translate_cursors
 
                     CP      'x'
@@ -671,7 +676,7 @@ _not_delete         CALL    valid_hex_char
                     LD      C, A
                     CALL    hex_char_to_num
                     PUSH    AF
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     POP     AF
                     
                     LD      DE, (edit_digit)
@@ -694,21 +699,21 @@ _not_delete         CALL    valid_hex_char
                     JR      _edit_right
 
 display_mem_row     LD      C, CARRIAGE_RETURN
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     LD      A, (monitor_mode)
                     AND     A
                     JR      NZ, _hex_values
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, ESCAPE_CHAR, 'b', CPM_NUM+15, 0
 
                     LD      DE, (monitor_address)
                     CALL    hex_word
 
                     LD      C, ' '
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
 
-_hex_values         CALL    m_print_inline
+_hex_values         CALL    MBB_PRINT
                     .DB     ESCAPE_CHAR, 'b', CPM_NUM+7, 0
 
                     LD      HL, (monitor_address)
@@ -722,7 +727,7 @@ _mem_hex            LD      A, (HL)
                     INC     HL
                     DJNZ    _mem_hex
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     ESCAPE_CHAR, 'b', CPM_NUM+15, 0
 
                     LD      HL, (monitor_address)
@@ -742,7 +747,7 @@ _not_control_char   CP      128
 _not_extended_char  PUSH    HL
                     PUSH    BC
                     LD      C, A
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     POP     BC
                     POP     HL
                     INC     HL
@@ -753,9 +758,9 @@ _not_extended_char  PUSH    HL
 ;
 format_memdisk      LD      A, 1
                     LD      C, A
-                    CALL    bios_seldsk
+                    CALL    BIOS_DSK_SELECT
 
-                    LD      HL, BIOS_SECTOR_ADDRESS     ; Sector buffer
+                    LD      HL, BIOS_DMA_ADDRESS     ; Sector buffer
                     LD      (_fmt_address),HL
 
                     LD      D, H                        ; Fill sector buffer with 0E5h (blank byte)
@@ -769,7 +774,7 @@ format_memdisk      LD      A, 1
                     LD      A,BIOS_BOOT_TRACKS          ; First track (Offset = 2)
 _fmt_track_loop     LD      (_fmt_track),A
                     LD      C,A                         ; Set track
-                    CALL    bios_settrk
+                    CALL    BIOS_DSK_TRACK
 
                     XOR     A                           ; Initial sector
 _fmt_sector_loop    LD      (_fmt_sector),A
@@ -777,10 +782,10 @@ _fmt_sector_loop    LD      (_fmt_sector),A
                     CP      MEMDISK_SECTORS
                     JR      Z,_fmt_next_track
                     LD      C,A                         ; Set sector
-                    CALL    bios_setsec
+                    CALL    BIOS_DSK_SECTOR
                     LD      BC,(_fmt_address)           ; Address to write from
-                    CALL    bios_setdma
-                    CALL    bios_write
+                    CALL    BIOS_DSK_DMA
+                    CALL    BIOS_DSK_WRITE
                     LD      A,(_fmt_sector)
 
                     INC     A
@@ -811,7 +816,7 @@ _hi_loop_join       CALL    hex_char_in
                     JR      Z, _hi_delete
                     LD      C, A
                     PUSH    AF
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     POP     AF
                     CALL    hex_char_to_num
                     LD      HL, (hex_input_result)
@@ -857,14 +862,14 @@ _hi_delete_join     LD      A, (_hi_size)
                     RR      L
                     LD      (hex_input_result), HL
 
-                    CALL    m_print_inline
+                    CALL    MBB_PRINT
                     .DB     ESCAPE_CHAR, "D ", ESCAPE_CHAR, "D", 0
                     JR      _hi_loop_join
 
 hex_input_result    .DW     0
 
 delete_or_enter     ; Wait for Delete or enter keys and handle..
-                    CALL    bios_conin
+                    CALL    BIOS_CONIN
                     CP      CARRIAGE_RETURN
                     RET     Z
                     LD      B, 0
@@ -887,11 +892,11 @@ start_menu          XOR    A
 _menu_loop          CALL    _display_menu
                     LD      BC, 600
                     CALL    pause_for_ticks
-                    CALL    bios_conist
+                    CALL    BIOS_CONIST
                     AND     A
                     RET     Z
 
-_menu_key           CALL    bios_conin
+_menu_key           CALL    BIOS_CONIN
                     CALL    translate_cursors
 
                     CP      KEY_DOWN
@@ -963,7 +968,7 @@ _set_escape         LD      A, 1
 
 
 _display_menu       LD      C, CARRIAGE_RETURN
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
 
                     LD      A, (menu_index)
                     LD      HL, (menu_address)
@@ -989,14 +994,14 @@ _display_entry      LD      A, (HL)
                     JR      Z, _entry_end
                     LD      C, A
                     PUSH    HL
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     POP     HL
                     INC     HL
                     JR      _display_entry
 _entry_end          LD      C, ESCAPE_CHAR
-                    CALL    bios_conout
+                    CALL    BIOS_CONOUT
                     LD      C, 'K'
-                    JP      bios_conout
+                    JP      BIOS_CONOUT
 
 _menu_end           LD      A, (menu_index)
                     DEC     A
@@ -1032,14 +1037,14 @@ _nibble             AND     $0F      ;LOW NIBBLE ONLY
                     ADC     A,$40
                     DAA 
                     LD      C,A
-                    JP      bios_conout
+                    JP      BIOS_CONOUT
 
 
 ;------------------------------------------------------
 ; Only accept hex characters (0-9, a-f), or DELETE from the input
 ; Returns with character in A, a-f are capitalised
 ;
-hex_char_in         CALL    bios_conin
+hex_char_in         CALL    BIOS_CONIN
                     CP      KEY_BACKSPACE
                     RET     Z
                     CALL    valid_hex_char
@@ -1075,7 +1080,7 @@ _alpha_char         SUB     'A'-10
 pause_for_ticks     LD      DE, (timer)
 _pause_loop         PUSH    BC
                     PUSH    DE
-                    CALL    bios_conist
+                    CALL    BIOS_CONIST
                     POP     DE
                     POP     BC
                     AND     A
@@ -1110,7 +1115,7 @@ timer_int           DI
                     LD      (timer), HL
                     POP     HL
                     EI
-                    RETI
+_do_reti            RETI
 
 ; Divide HL by C (unsigned)
 ;Inputs:
@@ -1136,10 +1141,11 @@ _div1               DJNZ    _div0
                     RET
 
 ;
-; Convert DE to a five digit BCD value stored in bcd_scratch
-; 
+; Convert DE to a five digit BCD value stored in data_scratch
+; Requires five bytes - 0 to 99,999. Smallest digit (units) first
+;
 de_to_bcd           XOR     A
-                    LD      HL, bcd_scratch
+                    LD      HL, data_scratch
                     LD      B, 5
 _clear_scratch      LD      (HL), A
                     INC     HL
@@ -1147,7 +1153,7 @@ _clear_scratch      LD      (HL), A
     
                     LD      B, 16           ; Convert 16 bits
 _bcd_loop           LD      C, 5
-                    LD      HL, bcd_scratch
+                    LD      HL, data_scratch
 _correct_digits     LD      A, (HL)
                     CP      5
                     JR      C, _digit_ok
@@ -1157,7 +1163,7 @@ _digit_ok           INC     HL
                     DEC     C
                     JR      NZ, _correct_digits                   
 
-                    LD      HL, bcd_scratch
+                    LD      HL, data_scratch
                     LD      C, 5
                     SLA     E
                     RL      D
@@ -1175,9 +1181,10 @@ _skip_carry         LD      (HL), A
                     DJNZ    _bcd_loop
                     RET
 
-bcd_scratch         .DB      0,0,0,0,0      ; Five bytes - 0 to 99,999. Smallest digit (units) first
+data_scratch        .FILL  8,0      ; Used for BCD display, and retrieving time
 
-                    .INCLUDE  "monitor_rtc.asm"
+                    .INCLUDE "monitor_dates.asm"
+                    .INCLUDE "monitor_rtc.asm"
                     .INCLUDE "ymodem.asm"
 
 .IF $ >= BIOS_START
@@ -1189,11 +1196,9 @@ bcd_scratch         .DB      0,0,0,0,0      ; Five bytes - 0 to 99,999. Smallest
     .STOP
 .ENDIF
 
-.ECHO "Spare after monitor "
+.ECHO "Monitor size is "
+.ECHO $-MONITOR_START
+.ECHO ". Spare after monitor "
 .ECHO BIOS_START-$
 .ECHO "\n\n"
-
-                    .FILL  BIOS_START-$
-
-                    .INCLUDE "bios.asm"
                     .END
