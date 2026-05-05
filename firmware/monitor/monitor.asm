@@ -419,12 +419,12 @@ _ymodem_firmware    LD      A, (MONITOR_START-YMODEM_INFO+ym_length_high)
                     CP      'y'
                     JP      NZ, _ymodem_handle_page
 
-                    LD      BC, (MONITOR_START-YMODEM_INFO+ym_length_low)
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_file_mode)         ; Page loaded
                     LD      E, A
                     LD      A, 1
                     CALL    MBB_SET_PAGE
-                    
+     
+                    LD      BC, (MONITOR_START-YMODEM_INFO+ym_length_low)                    
                     LD      HL, 4000h
                     LD      D, 0
                     CALL    MBB_FLASH_WRITE

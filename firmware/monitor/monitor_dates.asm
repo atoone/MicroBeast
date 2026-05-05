@@ -50,6 +50,8 @@ _select_week        CALL    BIOS_CONIST
                     AND     A
                     JR      Z, _select_week
                     CALL    BIOS_CONIN
+                    CALL    translate_cursors
+                    
                     CP      KEY_UP
                     JR      NZ, _test_down
                     LD      A, (day_of_week)

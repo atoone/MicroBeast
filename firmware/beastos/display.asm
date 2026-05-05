@@ -288,6 +288,7 @@ disp_bitmask        PUSH    AF
 
                     LD      A, (display_detect)
                     AND     DISPLAY_LCD
+                    LD      A, B
                     CALL    NZ, lcd_bitmask
                     LD      A, (display_detect)
                     AND     DISPLAY_LED
