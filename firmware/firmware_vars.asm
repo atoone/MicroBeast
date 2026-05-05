@@ -24,13 +24,6 @@ temp_byte           .BLOCK  1
 ; Display functions
 display_address     .BLOCK  1               ; byte - address of the display driver (right or left) being written to
 
-
-DEVICE_MICRO        .EQU    001h            ; ID for the hardware we're running on
-DEVICE_NANO         .EQU    002h
-
-DISPLAY_LCD         .EQU    001h            ; Bitmask for detected displays
-DISPLAY_LED         .EQU    002h            ; Note that this must be 2
-
 ;
 ; Panic codes
 ;
@@ -38,15 +31,3 @@ PANIC_0001          .EQU    0F001h
 PANIC_0002          .EQU    0F002h
 PANIC_0003          .EQU    0F003h
 PANIC_0004          .EQU    0F004h
-
-;
-; Boot mode
-;
-NORMAL_BOOT         .EQU    0FFh
-SKIP_OPTS           .EQU    000h             ; Skip reading boot options from RTC RAM
-
-; Boot options
-BOOT_TO_CPM         .EQU    001h
-BOOT_NO_LED         .EQU    002h
-BOOT_RESTORE_B      .EQU    004h
-BOOT_TTY_INPUT      .EQU    008h

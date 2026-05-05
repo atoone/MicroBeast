@@ -24,17 +24,31 @@
 ; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ; SOFTWARE.
 ;
+
                     .MODULE  main
                     .INCLUDE "ports.asm"
+                    .INCLUDE "micro/ports.asm"
+                    .INCLUDE "nano/ports.asm"
                     .INCLUDE "common_data.asm"
                     .INCLUDE "firmware_vars.asm"
                     .INCLUDE "beastos/beastos.inc"
 
+;
+; Let modules know they're being combined in a universal binary
+;
+; Note - there's an apparent bug in TASM that requires this is used *as well as* the
+; matching command line parameter -dFIRMWARE to force the macro to be recognised
+; by .IFDEF or .IFNDEF directives.
+
+.DEFINE FIRMWARE
+
                     .org 0h
                     DI                              ; Disable Z80 interrupts
+                    LD      A, ROM_PAGE_0           ; If we're rebooting, make sure we're running from ROM
+                    OUT     (IO_MEM_0), A
                     JR      _start
 
-                    .DB     "Firmware 1.8 28/04/26",0,0
+                    .DB     "Firmware 1.8 01/05/26",0,0
 
 _start              LD      SP, 0h                  ; Set SP
 
@@ -54,30 +68,48 @@ _finish_boot        LD      A, (boot_mode)                  ; If boot mode is ze
                     JR      Z, _skip_opts
 
                     CALL    rtc_get_opts                    ; Fetch the boot options byte
-_skip_opts          LD      C, A
+_skip_opts          LD      (boot_mode), A                  ; Store our boot mode...  
+
+                    AND     A
+                    CALL    Z, wait_key                     ; Only wait for a key if the boot options are unset/default
+
+                    ; Carry will be SET only if (a) no boot options and (b) we've received TTY input.
+                    ; In that case, configure for Serial mode
+                    ;
+                    LD      A, (boot_mode)
+                    JR      NC, _check_display
+
+                    OR      BOOT_TTY_INPUT
+                    LD      (boot_mode), A
+
+_check_display      LD      C, A
                     LD      A, (display_detect)             ; If no display is detected, disable output and just use UART
                     AND     A
                     LD      A, C
                     JR      NZ, _has_display
                     OR      BOOT_NO_LED
 
-_has_display        LD      (boot_mode), A                  ; Store our boot mode...  
-
-                    AND     A
-                    CALL    Z, wait_key                     ; Only wait for a key if the boot options are unset/default
-
-                    ;
-                    ; TODO - if input is from the UART, use that as primary input?
-                    ;
+_has_display        LD      (boot_mode), A
 
 ;======================================== SETUP BIOS ========================================
 
-                    LD      HL, monitor_img
+setup_bios          CALL    uart_inline
+                    .DB     "Loading Monitor\r\n", 0
+
+                    LD      HL, monitor_img         ; Install the monitor
                     CALL    get_img_header
-                    PUSH    DE
+                    PUSH    DE                      ; Put the destination on the stack so we can 'return' to the start of the monitor
                     LDIR
 
-                    LD      HL, bios_img
+                    LD      HL, bios_img            ; Install the bios
+                    CALL    get_img_header
+                    LDIR
+
+                    LD      A, (device_id)          ; If this is a MicroBeast, we're done
+                    CP      DEVICE_MICRO
+                    RET     Z
+
+                    LD      HL, nano_img            ; Otherwise, copy the nanobeast patch over it
                     CALL    get_img_header
                     LDIR
                     RET
@@ -198,9 +230,12 @@ _next_frame         LD      A, (temp_byte)
 
 little_sin          .DB     0, 3, 9, 19, 32, 48, 64, 81, 96, 110, 120, 126, 128, 126, 120, 110, 96, 81, 65, 48, 33, 19, 9, 3  ; 24 values
 
-nanobeast_intro     XOR     A
+nanobeast_intro     CALL    display_init
+                    CALL    init_ni2c
+
+                    XOR     A
                     LD      HL, welcome3
-                    JP      disp_string
+                    JP      disp_string   ; TODO - This displays nothing on a headless board - need to send something on the UART
 
 nano_jump_table     .INCLUDE "nano/jump_table.asm"
 
@@ -325,4 +360,15 @@ _string_end         SCF
                     .INCLUDE  rtc_options.asm
 monitor_img         .INCLUDE  build/monitor.inc
 bios_img            .INCLUDE  build/bios.inc
+nano_img            .INCLUDE  build/nano_patch.inc
+
+.IF $ > 03FFFh
+    .ECHO "Firmware is above 16K - Aborting"
+    .STOP
+.ENDIF
+
+.ECHO "Firmware size: "
+.ECHO $
+.ECHO " bytes\n\n"
+
 .END

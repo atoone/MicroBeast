@@ -26,16 +26,16 @@
 ;
                     .MODULE  main
 
-                    .INCLUDE "beastos.inc"
-                    .INCLUDE  "../common_data.asm"
-                    .INCLUDE "system_vars.asm"
+                    .INCLUDE "../common_data.asm"
+                    .INCLUDE "../beastos/beastos.inc"
+                    .INCLUDE "../beastos/system_vars.asm"
                     .INCLUDE "../ports.asm"
                     .INCLUDE "../keyboard.inc"
 
-MONITOR_START       .EQU   0DB00h
+MONITOR_START       .EQU    0DA00h
 
-                    .ORG   MONITOR_START
-                    CALL   MBB_RESET_HARDWARE           ; Interrupts are configured and enabled here
+                    .ORG    MONITOR_START
+                    CALL    MBB_RESET_HARDWARE           ; Interrupts are configured and enabled here
 
                     LD      A, (boot_mode)
                     AND     BOOT_TTY_INPUT
@@ -132,7 +132,7 @@ _restore_int        .EQU    $+1
                     JR      Z, _keep_led_on
 
                     CALL    MBB_PRINT
-                    .DB     NEWLINE, CARRIAGE_RETURN, "LED Off", 0
+                    .DB     NEWLINE, CARRIAGE_RETURN, "Display Off", 0
 
                     LD      A, (console_flags)
                     OR      CFLAGS_LED_OFF
@@ -208,6 +208,9 @@ ymodem_loader       XOR     A
                     AND     A
                     RET     Z
 
+                    CALL    MBB_PRINT
+                    .DB     "\n\r", 0
+
                     LD      DE, (_ymodem_address)
                     LD      A, (_ymodem_page)
                     LD      HL, MONITOR_START-YMODEM_BUFFER
@@ -235,7 +238,7 @@ ymodem_loader       XOR     A
 
                     PUSH    HL
                     CALL    MBB_PRINT
-                    .DB     CARRIAGE_RETURN, "ERROR: ", 0
+                    .DB     "\n\rERROR: ", 0
 
                     POP     HL
 
@@ -352,8 +355,16 @@ _ymodem_flash       CALL    MBB_PRINT
                     LD      D, A
 
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_file_mode)         ; Page loaded
+;
+; Writing to flash. Start here with A being the page loaded by YModem, and D being the destination page in ROM (0-1F)
+;
 _next_page          LD      (_ymodem_page), A
-                    OUT     (IO_MEM_1), A
+                    LD      E, A
+                    LD      A, D
+                    LD      (_ymodem_dest), A
+
+                    LD      A, 1
+                    CALL    MBB_SET_PAGE
 
                     LD      HL, (MONITOR_START-YMODEM_INFO+ym_length_mid)
                     LD      A, L
@@ -365,11 +376,16 @@ _next_page          LD      (_ymodem_page), A
                     LD      A, B
                     OR      C
                     JR      Z, _flash_done
+                    LD      A, (_ymodem_dest)
+                    LD      D, A
                     LD      HL, 4000h
                     CALL    MBB_FLASH_WRITE
 
-_flash_done         LD      A, RAM_PAGE_0
+_flash_done         LD      A, RAM_PAGE_0 
                     OUT     (IO_MEM_0), A
+                    LD      E, RAM_PAGE_1
+                    LD      A, 1
+                    CALL    MBB_SET_PAGE
 
                     CALL    MBB_PRINT
                     .DB     CARRIAGE_RETURN, NEWLINE, "Done ", ESCAPE_CHAR, "K", 0           
@@ -382,11 +398,13 @@ _full_page          LD      BC, 0040h
                     LD      HL, 4000h
                     LD      B, H
                     LD      C, L
+                    LD      A, (_ymodem_dest)
+                    LD      D, A
                     CALL    MBB_FLASH_WRITE
                     INC     D
                     LD      A,(_ymodem_page)
                     INC     A
-                    JR      _next_page
+                    JR      _next_page                                      ; FIXME: Should be JR
 
 _ymodem_firmware    LD      A, (MONITOR_START-YMODEM_INFO+ym_length_high)
                     AND     A
@@ -403,7 +421,9 @@ _ymodem_firmware    LD      A, (MONITOR_START-YMODEM_INFO+ym_length_high)
 
                     LD      BC, (MONITOR_START-YMODEM_INFO+ym_length_low)
                     LD      A, (MONITOR_START-YMODEM_INFO+ym_file_mode)         ; Page loaded
-                    OUT     (IO_MEM_1), A
+                    LD      E, A
+                    LD      A, 1
+                    CALL    MBB_SET_PAGE
                     
                     LD      HL, 4000h
                     LD      D, 0
@@ -413,6 +433,11 @@ _ymodem_firmware    LD      A, (MONITOR_START-YMODEM_INFO+ym_length_high)
                     .DB     CARRIAGE_RETURN, NEWLINE, "Done ", ESCAPE_CHAR, "K", 0
                     LD      DE, (MONITOR_START-YMODEM_INFO+ym_length_low)
                     CALL    hex_word
+
+                    LD      E, RAM_PAGE_1
+                    LD      A, 1
+                    CALL    MBB_SET_PAGE
+
                     JP      BIOS_CONIN
 
 _not_firmware       CALL    MBB_PRINT
@@ -421,8 +446,9 @@ _not_firmware       CALL    MBB_PRINT
 
 
 _ymodem_address     .DW     0
-_ymodem_page        .DB     0
+_ymodem_page        .DB     0   ; _page and _set must be sequential
 _ymodem_set         .DB     0
+_ymodem_dest        .DB     0
 
 ymodem_mem_menu     .DB     "File actions", 0
                     .DW     _ymodem_view
@@ -456,12 +482,13 @@ ymodem_menu         .DB     "Download options", 0
 _ymodem_from_file   LD      DE, 0FFFFh
                     LD      (_ymodem_address), DE
                     LD      (_ymodem_page), DE
+
 _ymodem_transfer    CALL    MBB_PRINT
-                    .DB     CARRIAGE_RETURN, "Start transfer", ESCAPE_CHAR, "K", 0
+                    .DB     CARRIAGE_RETURN, "\n\rStart transfer", ESCAPE_CHAR, "K", 0
                     RET
 
 _ymodem_logical     CALL    MBB_PRINT
-                    .DB     CARRIAGE_RETURN, "Address 0000-FFFF >", ESCAPE_CHAR, "K", 0
+                    .DB     CARRIAGE_RETURN, "\n\rAddress 0000-FFFF >", ESCAPE_CHAR, "K", 0
                     LD      B, 4
                     CALL    hex_input
                     CALL    delete_or_enter
@@ -475,7 +502,7 @@ _ymodem_set_and_go  LD      DE, (hex_input_result)
                     JR      _ymodem_transfer
 
 _ymodem_physical    CALL    MBB_PRINT
-                    .DB     CARRIAGE_RETURN, "Page 20-3F >", ESCAPE_CHAR, "K", 0
+                    .DB     CARRIAGE_RETURN, "\n\rPage 20-3F >", ESCAPE_CHAR, "K", 0
                     LD      B, 2
                     CALL    hex_input
                     CALL    delete_or_enter
@@ -889,6 +916,9 @@ start_menu          XOR    A
                     LD     (menu_address), HL
                     LD     (keyboard_escape), A
 
+                    CALL    MBB_PRINT
+                    .DB     "\n\r",0
+
 _menu_loop          CALL    _display_menu
                     LD      BC, 600
                     CALL    pause_for_ticks
@@ -989,15 +1019,21 @@ _next_menu          LD      A, (HL)
                     JR      Z, _menu_end
                     DJNZ    _next_menu
                     
-_display_entry      LD      A, (HL)
+_display_entry      LD      B, 24
+_disp_ent_loop      LD      A, (HL)
                     AND     A
-                    JR      Z, _entry_end
-                    LD      C, A
-                    PUSH    HL
-                    CALL    BIOS_CONOUT
-                    POP     HL
+                    LD      C, ' '
+                    JR      Z, _use_space
                     INC     HL
-                    JR      _display_entry
+                    LD      C, A
+_use_space          PUSH    HL
+                    PUSH    BC
+                    CALL    BIOS_CONOUT
+                    POP     BC
+                    POP     HL
+                    DJNZ    _disp_ent_loop
+                    RET
+
 _entry_end          LD      C, ESCAPE_CHAR
                     CALL    BIOS_CONOUT
                     LD      C, 'K'

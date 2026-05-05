@@ -42,74 +42,6 @@ UART_LINE_STATUS    .EQU    025h    ; Line status
 UART_MODEM_STATUS   .EQU    026h    ; Modem status
 UART_SCRATCH        .EQU    027h    ; Scratch register
 
-;==================================== PIO ============================================
-PIO_A_DATA          .EQU  010h
-PIO_A_CTRL          .EQU  012h
-
-PIO_B_DATA          .EQU  011h
-PIO_B_CTRL          .EQU  013h
-
-PIO_MODE_0          .EQU  00Fh      ; Mode 0: All outputs
-PIO_MODE_1          .EQU  04fh      ; Mode 1: All inputs
-PIO_MODE_2          .EQU  080h      ; Mode 2 (Port A only): Bi-directional
-PIO_MODE_3          .EQU  0CFh      ; Mode 3: Per-pin I/O on the given port - write an additional word with bits set (1) for input, reset (0) for output on the matching pin.
-
-PIO_SET_INTERRUPT   .EQU  007h      ; Set interrupt control world. By itself, this wil disable interrupts on the given port. OR with the following constants to change this
-PIO_ENABLE_INT      .EQU  080h      ; Enable interrupts on the given port, when OR'd with the PIO_SET_INTERRUPT control word.
-PIO_INT_MASK        .EQU  010h      ; When OR'd with the PIO_SET_INTERRUPT control word, the following word will enable interrupts for pins where the matching bit is zero
-
-;==================================== NIO ============================================
-NIO_A_DATA          .EQU  010h
-NIO_A_DIR           .EQU  012h
-
-NIO_B_DATA          .EQU  011h
-NIO_B_CTRL          .EQU  013h
-
-NIO_LCD_LOWER       .EQU  016h      ; Note: This is also decoded by Microbeast PIO A CTRL
-NIO_LCD_UPPER       .EQU  017h      ; Note: This is also decoded by Microbeast PIO B CTRL
-
-NIO_TEST_BITS       .EQU  04Fh      ; Note - MicroBeast PIO interprets this as mode 1, all inputs
-NIO_VALID_LOWER     .EQU  0D4h      ; Bit pattern returned by LCD translation..
-NIO_VALID_UPPER     .EQU  0FAh
-
-NIO_I2C_IDLE        .EQU  081h
-
-NI2C_DATA_BIT       .EQU    7           ; I2C on Port B CTRL
-NI2C_CLK_BIT        .EQU    0
-
-NI2C_DATA_MASK      .EQU    1 << NI2C_DATA_BIT
-NI2C_CLK_MASK       .EQU    1 << NI2C_CLK_BIT
-
-NI2C_REGISTER       .EQU    00h
-
-NAUDIO_REGISTER     .EQU    04h         ; Audio on Port B CTRL
-NAUDIO_MASK         .EQU    01h
-
-NINT_REGISTER       .EQU    02h         ; INT register controls interrupt inputs
-EXT_INT_MASK        .EQU    08h
-UART_INT_MASK       .EQU    10h
-RTC_INT_MASK        .EQU    20h
-
-;================================== AUDIO ============================================
-; Constants for Audio output
-AUDIO_PIO           .EQU  1         ; Audio on PIO (rev. 0.1 boards)
-AUDIO_UART          .EQU  2         ; Audio on UART (rev. 0.2 boards)
-
-AUDIO_VERSION       .EQU  AUDIO_UART
-
-#IF AUDIO_VERSION = AUDIO_PIO
-PORT_B_IOMASK       .EQU  0EFh      ; All inputs, apart from bit 4 (audio out)
-AUDIO_MASK          .EQU  010h      ; Bitmask for audio output on Port B. The bit is set for the output pin.
-AUDIO_PORT          .EQU  PIO_B_DATA
-
-#ELSE
-PORT_B_IOMASK       .EQU  0FFh      ; All inputs
-AUDIO_MASK          .EQU  008h      ; Bitmask for audio output on UART Out 2. The bit is set for the output pin
-AUDIO_PORT          .EQU  UART_MODEM_CTRL
-
-#ENDIF
-
-
 ;=================================== MEMORY PAGING ===================================
 IO_MEM_0            .EQU    070h      ; Page 0: 0000h - 3fffh
 IO_MEM_1            .EQU    071h      ; Page 1: 4000h - 7fffh
@@ -133,12 +65,14 @@ ROM_PAGE_16         .EQU    010h
 
 PAGE_1_START        .EQU    4000h
 
-;====================================== I2C DEVICES ===================================
-I2C_DATA_BIT            .equ    7
-I2C_CLK_BIT             .equ    6
+;=================================== MEMORY PAGING ===================================
+; Common ports for both MicroBeast and NanoBeast
+;
 
-I2C_DATA_MASK           .equ    1 << I2C_DATA_BIT
-I2C_CLK_MASK            .equ    1 << I2C_CLK_BIT
+NIO_LCD_LOWER       .EQU  016h      ; Note: This is also decoded by Microbeast PIO A CTRL
+NIO_LCD_UPPER       .EQU  017h      ; Note: This is also decoded by Microbeast PIO B CTRL
+
+;====================================== I2C DEVICES ===================================
 
 ; LED Display
 ;==========

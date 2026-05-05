@@ -1131,6 +1131,7 @@ interrupt_handler   DI
                     PUSH    HL
                     PUSH    DE
                     PUSH    BC
+
                     CALL    keyboard_poll
 
                     LD      A,(control_key_pressed)
@@ -1199,7 +1200,7 @@ _shift_row          PUSH    AF
                     POP     AF
                     LD      (display_row), A
 
-_shift_complete     LD      A, (console_flags)
+_shift_update     LD      A, (console_flags)
                     AND     ~CFLAGS_TRACK_CURSOR
 _flags_and_redraw   OR      CFLAGS_SHOW_MOVED
                     LD      (console_flags), A
@@ -1242,7 +1243,7 @@ _shift_col          PUSH    AF
                     CALL    update_cursor
                     POP     AF
                     LD      (display_col), A
-                    JR      _shift_complete
+                    JR      _shift_update
 
 _not_ctrl_left      CP      KEY_CTRL_ENTER
                     JR      NZ, _not_ctrl_enter
@@ -1354,6 +1355,12 @@ _skip_videobeast    LD      A, C
 _unblink            JP    disp_character
 
                     .INCLUDE "../ports.asm"
+
+.IFNDEF NANO_BIOS
+                    .INCLUDE "../micro/ports.asm"
+.ELSE
+                    .INCLUDE "../nano/ports.asm"
+.ENDIF
 
                     .INCLUDE "../keyboard.inc"
                     .INCLUDE "../uart.asm"
@@ -1469,7 +1476,7 @@ get_page_mapping    LD      A, C
 
 ; Set the User page mapping. Sets page A (0-2) to the physical (RAM/ROM) page in E
 ; Returns with carry SET if successful. The given logical page will now point to the physical page in RAM or ROM
-;
+; Preserves D
 set_page_mapping    CALL    _mapping_address
                     RET     NC
                     LD      (HL), E 
@@ -1548,7 +1555,8 @@ _return_usr_int     LD      HL, (user_interrupt)
 ; End of core BIOS - hardware specific code  follows
 ;
 
-configure_hardware  DI     
+configure_hardware  DI    
+
                     LD      A, RAM_PAGE_0
                     OUT     (IO_MEM_0), A       ; Page 0 is RAM 0 
                     LD      (page_0_mapping), A
@@ -1577,15 +1585,6 @@ _fill_vector        LD      (HL), 0FDh
                     LD      HL, 0
                     LD      (user_interrupt), HL
 
-                    LD      A, 2
-                    OUT     (PIO_B_CTRL),A      ; Zero interrupt vector
-
-                    LD      A, 0B7h             ; Enable interrupts on any of the following bits
-                    OUT     (PIO_B_CTRL),A
-                    NOP
-                    LD      A, 0CFh             ; Just B5 (RTC interrupt) 
-                    OUT     (PIO_B_CTRL),A
-
                     LD      A, 0FEh
                     LD      I, A
                     IM      2
@@ -1597,14 +1596,21 @@ _fill_vector        LD      (HL), 0FDh
 
                     EI
 
-                    LD      A, 0
                     CALL    uart_init           ; Reinitialise the UART to make sure we've not missed anything
+                    CALL    rtc_init            ; Make sure clock is running and reset time if necesary                   
+                    CALL    rtc_64Hz            ; Set up the interrupt signal
 
-                    CALL    rtc_init            ; Make sure clock is running and reset time if necesary
-                    JP      rtc_64Hz            ; And set up the interrupt signal
+                    JP      enable_interrupts
 
+.IFNDEF NANO_BIOS
+.ECHO "Building for MicroBeast\n\n"
                     .INCLUDE "../micro/io.asm"
                     .INCLUDE "../micro/i2c.asm"
+.ELSE
+.ECHO "Building for NanoBeast\n\n"
+                    .INCLUDE "../nano/io.asm"
+                    .INCLUDE "../nano/i2c.asm"
+.ENDIF
 
 .IF $ > (BIOS_TOP - (3*JUMP_TABLE_SIZE))
     .ECHO "BIOS No room for Jump Table ("
@@ -1617,8 +1623,11 @@ _fill_vector        LD      (HL), 0FDh
 
 BIOS_SPARE          .EQU    BIOS_TOP - $ - (3*JUMP_TABLE_SIZE)
                     .FILL   BIOS_SPARE, 0
-
+.IFNDEF NANO_BIOS
                     .INCLUDE "../micro/jump_table.asm"
+.ELSE
+                    .INCLUDE "../nano/jump_table.asm"
+.ENDIF
 
 .IF $ > BIOS_TOP
     .ECHO "End of BIOS is too high ("

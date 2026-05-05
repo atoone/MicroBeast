@@ -95,4 +95,21 @@ _note_table         .DW 6379
                     .DW 12045
                     .DW 0
 
+;
+; This is always at the same offset, since both versions of the play_note routine are identical apart from port addresses
+;
+
+;
+; Enable RTC driven interrupts through the IO controller
+;
+enable_interrupts   LD      A, 2
+                    OUT     (PIO_B_CTRL),A      ; Zero interrupt vector
+
+                    LD      A, 0B7h             ; Enable interrupts on any of the following bits
+                    OUT     (PIO_B_CTRL),A
+                    NOP
+                    LD      A, 0CFh             ; Just B5 (RTC interrupt) 
+                    OUT     (PIO_B_CTRL),A
+                    RET
+
                     .MODULE main

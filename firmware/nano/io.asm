@@ -41,7 +41,7 @@ _note_shifted       LD      B, C
                     SLA     B    
                     SLA     B           ; Now BC = 4096 * C
 
-                    IN      A, (AUDIO_PORT)
+                    IN      A, (NAUDIO_PORT)
                     LD      (_tone_val), A
                     DI
 
@@ -62,7 +62,7 @@ _tone_val           .EQU    $+1
                     LD      (_tone_val), A      ; 13
                     OR      NAUDIO_REGISTER     ; 7
 
-                    OUT     (AUDIO_PORT),A      ; 12
+                    OUT     (NAUDIO_PORT),A     ; 12
 
                     LD      A, B                ; 4
                     LD      B, 5                ; 7
@@ -91,4 +91,21 @@ _note_table         .DW 6379
                     .DW 12045
                     .DW 0
 
+;
+; This is always at the same offset, since both versions of the play_note routine are identical apart from port addresses
+;
+
+;
+; Enable RTC driven interrupts through the IO controller
+; If entered with A = 0, disable interrupts
+;
+nenable_interrupts  LD      A, NINT_REGISTER | RTC_INT_MASK
+                    OUT     (NIO_B_CTRL), A
+
+                    RET
+
                     .MODULE main
+
+.IFNDEF FIRMWARE
+enable_interrupts   .EQU nenable_interrupts
+.ENDIF

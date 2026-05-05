@@ -133,9 +133,3 @@ PANIC_0001          .EQU    0F001h
 PANIC_0002          .EQU    0F002h
 PANIC_0003          .EQU    0F003h
 PANIC_0004          .EQU    0F004h
-
-; Boot options
-BOOT_TO_CPM         .EQU    001h
-BOOT_NO_LED         .EQU    002h
-BOOT_RESTORE_B      .EQU    004h
-BOOT_TTY_INPUT      .EQU    008h

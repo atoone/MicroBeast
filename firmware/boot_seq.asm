@@ -44,15 +44,16 @@ JUMP_TABLE_LENGTH   .EQU  (3*JUMP_TABLE_SIZE)
 ;
 ; Initialise ports for NanoBeast
 ;
-                    LD      D, DEVICE_NANO
-                    JR      _boot_beep
-
                     LD      A, 0FFh                 ; Port A to all inputs
                     OUT     (NIO_A_DIR), A
 
                     LD      A, NINT_REGISTER        ; Clear the interrupt register
                     OUT     (NIO_B_CTRL), A
 
+                    LD      D, DEVICE_NANO
+
+                    LD     HL, 0E80h                ; Approx middle C
+                    JR      _boot_beep
 ;
 ; Initialise ports for MicroBeast
 ;
@@ -304,7 +305,11 @@ _uart_ready5
 
                     LD      A, RAM_PAGE_0           ; Now we're running from RAM
                     OUT     (IO_MEM_0), A
-
+                    INC     A
+                    OUT     (IO_MEM_1), A
+                    INC     A
+                    OUT     (IO_MEM_2), A
+                    
                     CALL    uart_init               ; Reinitialise the UART to make sure we've not missed anything
 
                     CALL    uart_inline
@@ -375,7 +380,7 @@ _key_ok             RRC     B
                     JR      Z, start_micro
 
                     CALL    uart_inline
-                    .DB     "NanoBeast starting...\n\r",0
+                    .DB     "NanoBeast:\n\r",0
 
                     CALL    uart_inline
                     .DB     "Detected NIO\r\n",0            ; We already know this
@@ -398,7 +403,7 @@ _beep               LD      DE, 0400h
                     JR      _beep
 
 start_micro         CALL    uart_inline
-                    .DB     "MicroBeast starting...\n\r",0
+                    .DB     "MicroBeast:\n\r",0
 
                     CALL    init_portb
                     CALL    i2c_bus_reset

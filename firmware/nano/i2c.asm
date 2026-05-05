@@ -140,34 +140,7 @@ ni2c_address_w       SLA     A
 ; Returns Carry CLEAR if no acknowledge
 ;
 ; Uses A, B, C, D
-ni2c_write          CALL    ni2c_send_byte
-                    BIT     NI2C_DATA_BIT, D     ; D contains acknowledge bit
-                    SCF
-                    RET     Z               ; Return with carry set if acknowledge bit is low
-
-                    CALL    ni2c_stop        ; Stop bus if error
-                    SCF
-                    CCF
-                    RET                     ; Clear carry if acknowledge is high
-
-; Read byte from i2C into A, without ACK
-;
-; Uses A, B, C, D
-ni2c_read           LD      B, 8h
-_loop_r             IN      A, (NIO_B_CTRL)
-                    RL      A
-_data_high          RL      C
-                    CALL    ni2c_scl_cycle
-                    DJNZ    _loop_r
-
-                    LD      A, C
-                    RET
-
-;
-; Send a byte in A, returning the ACK state in D
-; Uses A, B, C,
-;
-ni2c_send_byte      PUSH    HL
+ni2c_write          PUSH    HL
                     PUSH    DE
                     LD      D, A
                             
@@ -205,6 +178,26 @@ _fast_loop          LD      A, H
                     OUT     (NIO_B_CTRL), A                 ; Clock low, SDA released
                     LD      (nio_i2c_data), A
 
+                    BIT     NI2C_DATA_BIT, D     ; D contains acknowledge bit
+                    SCF
+                    RET     Z               ; Return with carry set if acknowledge bit is low
+
+                    CALL    ni2c_stop        ; Stop bus if error
+                    SCF
+                    CCF
+                    RET                     ; Clear carry if acknowledge is high
+
+; Read byte from i2C into A, without ACK
+;
+; Uses A, B, C, D
+ni2c_read           LD      B, 8h
+_loop_r             IN      A, (NIO_B_CTRL)
+                    RL      A
+_data_high          RL      C
+                    CALL    ni2c_scl_cycle
+                    DJNZ    _loop_r
+
+                    LD      A, C
                     RET
 
 ;

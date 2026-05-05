@@ -112,7 +112,7 @@ flash_sector_erase  DI                          ; Disable interrupts
                     LD      H, E                    ; And write the sector bits as an address (bits 0-11 are ignored)
                     LD      (HL), _cmd_6_data_erase
 
-_wait_erase         LD      A,(HL)
+_wait_erase         LD      A,(HL)                  ; Max 25ms
                     RLC     A
                     JR      NC, _wait_erase
 
@@ -178,7 +178,7 @@ flash_write_byte    DI
                     POP     HL
                     LD      (HL), E
 
-_wait_byte          LD      A, (HL)
+_wait_byte          LD      A, (HL)             ; Max 10us
                     XOR     E
                     RLC     A
                     JR      NC, _wait_byte

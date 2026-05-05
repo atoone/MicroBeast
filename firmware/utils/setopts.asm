@@ -32,23 +32,8 @@
 ;
                         .ORG    0100h
 
-                        .INCLUDE "beastos/bios.inc"
-
-;
-; RTC Opts include uses system labels for i2c routines, so EQUate these to the matching BIOS jump table entries
-;
-i2c_read_from           .EQU    MBB_I2C_RD_ADDRESS
-i2c_read                .EQU    MBB_I2C_READ
-i2c_write_to            .EQU    MBB_I2C_WR_ADDRESS
-i2c_write               .EQU    MBB_I2C_WRITE
-i2c_ack                 .EQU    MBB_I2C_ACK
-i2c_stop                .EQU    MBB_I2C_STOP
-
-; Boot options
-BOOT_TO_CPM             .EQU    001h
-BOOT_NO_LED             .EQU    002h
-BOOT_RESTORE_B          .EQU    004h
-BOOT_TTY_INPUT          .EQU    008h
+                        .INCLUDE "beastos/beastos.inc"
+                        .INCLUDE "common_data.asm"
 
                         LD      (old_stack), SP
                         LD      SP, old_stack

@@ -28,25 +28,70 @@ CONFIG_PAGE         .EQU    3
 BRIGHT_PAGE         .EQU    1
 LED_PAGE            .EQU    0 
 
-display_init        CALL    disp_clear
+
+LCD_COMMAND         .EQU    40h
+LCD_DATA            .EQU    41h
+
+
+LCD_DO_RESET        .EQU    0E2h
+LCD_DO_NOP          .EQU    0E3h
+
+LCD_DO_MODE_SET     .EQU    0F1h
+LCD_DO_QTR_DUTY     .EQU    0ACh
+LCD_DO_MODE_END     .EQU    0F0h
+
+LCD_DO_POWER        .EQU    028h
+LCD_POWER_BOOSTER   .EQU    004h
+LCD_POWER_REG       .EQU    002h
+LCD_POWER_FOLLOW    .EQU    001h
+
+LCD_DO_POWER_ALL    .EQU    LCD_DO_POWER | LCD_POWER_BOOSTER | LCD_POWER_REG | LCD_POWER_FOLLOW
+
+LCD_DO_PAGE_SET     .EQU    0B0h
+LCD_DO_COLUMN_HI    .EQU    010h        ; D2-D0 = Upper three bits
+LCD_DO_COLUMN_LO    .EQU    000h        ; D3-D0 = Lower four bits
+
+LCD_DO_MODE_NORMAL  .EQU    0A4h        ; Normal mode
+LCD_DO_MODE_ALL     .EQU    0A5h        ; Show all pixels
+
+LCD_DO_MODE_POS     .EQU    0A6h        ; 
+LCD_DO_MODE_NEG     .EQU    0A7h        ; Reverse
+
+LCD_DO_DISPLAY_ON   .EQU    0AFh        ; Display on
+LCD_DO_DISPLAY_OFF  .EQU    0AEh        ; Display off
+
+LCD_DO_SEG_DIR      .EQU    0A0h        ; Segment direction
+LCD_DO_COMMON_DIR   .EQU    0C0h        ; Common direction     
+
+LCD_NO_COMMAND      .EQU    0FFh
+
+display_init        LD      A, (display_detect)
+                    AND     DISPLAY_LCD
+                    CALL    NZ, lcd_reset
+
+                    CALL    disp_clear
                     LD      E, DISP_DEFAULT_BRIGHTNESS
                     CALL    disp_brightness
 
-                    CALL    disp_select_l
-                    CALL    disp_config
+                    LD      A, (display_detect)
+                    AND     DISPLAY_LED
+                    RET     Z
 
-                    CALL    disp_select_r
-                    CALL    disp_config
+                    CALL    _disp_select_l
+                    CALL    _disp_config
 
-disp_select_l       LD      A, DL_ADDRESS
+                    CALL    _disp_select_r
+                    CALL    _disp_config
+
+_disp_select_l      LD      A, DL_ADDRESS
                     LD      (display_address), A
                     RET
 
-disp_select_r       LD      A, DR_ADDRESS
+_disp_select_r      LD      A, DR_ADDRESS
                     LD      (display_address), A
                     RET
 
-disp_config         LD      L, CONFIG_PAGE
+_disp_config        LD      L, CONFIG_PAGE
                     CALL    disp_page
                     LD      A, (display_address)
                     LD      H, A
@@ -58,13 +103,62 @@ disp_config         LD      L, CONFIG_PAGE
                     CALL    MBB_I2C_WRITE
                     JP      MBB_I2C_STOP
 
+lcd_reset           LD      B, 4
+_reset_loop         LD      A, LCD_DO_RESET
+                    OUT     (LCD_COMMAND), A       
+                    CALL    _pause
+                    CALL    _pause
+                    CALL    _pause
+
+lcd_init            LD      HL, _reset_list
+_init_loop          LD      A,(HL)
+                    INC     HL
+                    CP      LCD_NO_COMMAND
+                    JR      Z, _lcd_done
+
+                    OUT     (LCD_COMMAND), A
+                    CALL    _pause
+                    JR      _init_loop
+
+_lcd_done           IN      A, (LCD_DATA)
+                    AND     A
+                    RET     Z
+                    DJNZ    _reset_loop
+                    RET
+
+_pause              PUSH    BC
+                    LD      BC, 0
+
+_pause_loop         DJNZ    _pause_loop   
+                    DEC     C
+                    JR      NZ, _pause_loop
+
+                    POP     BC
+                    RET        
+
+_reset_list         .DB LCD_DO_POWER_ALL
+                    .DB LCD_DO_PAGE_SET          ; Set page address
+                    .DB LCD_DO_COLUMN_HI
+                    .DB LCD_DO_COLUMN_LO
+                    .DB LCD_DO_MODE_SET          ; Set quarter duty
+                    .DB LCD_DO_QTR_DUTY
+                    .DB LCD_DO_MODE_END
+                    .DB LCD_DO_MODE_NORMAL
+                    .DB LCD_DO_DISPLAY_ON
+                    .DB LCD_DO_SEG_DIR
+                    .DB LCD_DO_COMMON_DIR
+                    .DB LCD_NO_COMMAND
 ;
 ; Sets the brightness for the display
 ; Enter with E set to the desired brightness for all segments
 ;
-disp_brightness     CALL    disp_select_l
+disp_brightness     LD      A, (display_detect)
+                    AND     DISPLAY_LED
+                    RET     Z
+
+                    CALL    _disp_select_l
                     CALL    _set_bright
-                    CALL    disp_select_r
+                    CALL    _disp_select_r
 _set_bright         LD      L, BRIGHT_PAGE
                     CALL    disp_page
                     LD      L, 12
@@ -117,6 +211,15 @@ disp_unlock         LD      A, (display_address)
 ;
 ;
 disp_char_bright    PUSH    BC
+                    LD      B, A
+
+                    LD      A, (display_detect)
+                    AND     DISPLAY_LED
+                    JR      NZ, _set_bright_ok
+                    POP     BC
+                    RET
+
+_set_bright_ok      LD      A, B
                     LD      B, DL_ADDRESS
                     CP      12
                     JP      C, _bright_left
@@ -181,6 +284,16 @@ _not_control        BIT     7, A
 ;
 ; Uses A, B, C, D, E
 disp_bitmask        PUSH    AF
+                    LD      B, A
+
+                    LD      A, (display_detect)
+                    AND     DISPLAY_LCD
+                    CALL    NZ, lcd_bitmask
+                    LD      A, (display_detect)
+                    AND     DISPLAY_LED
+                    JR      Z, _no_led
+
+                    LD      A, B
                     PUSH    HL
                     LD      H, DL_ADDRESS
                     CP      12
@@ -196,8 +309,55 @@ _disp_left          LD      L, A
                     LD      A, H
                     CALL    MBB_I2C_WRITE
                     CALL    MBB_I2C_STOP
-                    POP     AF
+_no_led             POP     AF
                     INC     A
+                    RET
+
+; Display a bitmask in HL at column A (0 - 23)
+;
+; Returns with A pointing to next column, preserves HL
+;
+; Uses C
+lcd_bitmask         LD      C, A
+                    LD      A, LCD_DO_PAGE_SET          ; Set page address
+
+                    OUT     (LCD_COMMAND), A
+
+                    LD      A, C
+                    SRL     A
+                    SRL     A
+                    AND     07h
+                    OR      LCD_DO_COLUMN_HI
+
+                    OUT     (LCD_COMMAND), A
+
+                    LD      A, C
+                    SLA     A
+                    SLA     A
+                    AND     0Ch
+                    OR      LCD_DO_COLUMN_LO
+
+                    OUT     (LCD_COMMAND), A
+
+                    INC     C
+
+                    LD      A, L
+                    OUT     (NIO_LCD_LOWER), A
+                    LD      A, H
+                    OUT     (NIO_LCD_UPPER), A
+
+                    IN      A, (NIO_LCD_LOWER)
+                    CALL    _do_byte
+                    IN      A, (NIO_LCD_UPPER)
+
+_do_byte            OUT     (LCD_DATA), A
+
+                    SRL     A
+                    SRL     A
+                    SRL     A
+                    SRL     A
+                    OUT     (LCD_DATA), A
+                    LD      A, C
                     RET
 
 ;
