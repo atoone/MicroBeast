@@ -59,7 +59,7 @@ BDOS_WRITERANDOMZERO    .EQU    26h
 BIOS_START              .EQU    0EA00h           ; If (WHEN) the BIOS start address changes, this will be invalidated
 BIOS_TOP                .EQU    0FDFDh           ; End of BIOS (jump table). Interrupt vector follows, then system vars and stack
 
-JUMP_TABLE_SIZE         .EQU    21               ; Size of BeastOS jump table
+JUMP_TABLE_SIZE         .EQU    22               ; Size of BeastOS jump table
 
 BIOS_BOOT               .EQU    BIOS_START
 BIOS_WBOOT              .EQU    BIOS_START+003h

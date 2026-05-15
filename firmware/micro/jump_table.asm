@@ -10,11 +10,12 @@
 ;
 
 
-.IF JUMP_TABLE_SIZE != 21
+.IF JUMP_TABLE_SIZE != 22
     .ECHO "Jump table size is inconsistent"
     .STOP
 .ENDIF
 
+                    JP          get_timer           ; 22 (0FDBBh) - Get the 32 bit timer value in HL (low word) and DE (high word)
                     JP          load_ccp            ; 21 (0FDBEh) - Load the CP/M CCP
                     JP          configure_hardware  ; 20 (0FDC1h) - Set up default page mapping and interrupt handler
                     JP          i2c_ack             ; 19 (0FDC4h) - Send an i2c ACK.

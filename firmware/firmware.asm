@@ -246,6 +246,7 @@ micro_jump_table    .INCLUDE "micro/jump_table.asm"
 
 m_print_inline      JP      uart_inline
 
+get_timer
 load_ccp
 configure_hardware
 set_usr_interrupt

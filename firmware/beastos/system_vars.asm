@@ -133,3 +133,5 @@ PANIC_0001          .EQU    0F001h
 PANIC_0002          .EQU    0F002h
 PANIC_0003          .EQU    0F003h
 PANIC_0004          .EQU    0F004h
+PANIC_0005          .EQU    0F005h
+PANIC_0006          .EQU    0F006h

@@ -309,7 +309,6 @@ _uart_ready5
                     OUT     (IO_MEM_1), A
                     INC     A
                     OUT     (IO_MEM_2), A
-                    
                     CALL    uart_init               ; Reinitialise the UART to make sure we've not missed anything
 
                     CALL    uart_inline
@@ -388,9 +387,13 @@ _key_ok             RRC     B
                     CALL    ni2c_bus_reset
                     JR      check_devices
 
+key_panic           CALL    uart_inline
+                    .DB     "\n\rKey panic :", 0
+                    JR      _panic_code
+
 panic               CALL    uart_inline
                     .DB     "\n\rPanic :",0
-                    LD      A, H
+_panic_code         LD      A, H
                     CALL    uart_hex
                     LD      A, L
                     CALL    uart_hex
@@ -414,12 +417,14 @@ start_micro         CALL    uart_inline
                     DJNZ    $
 
                     IN      A, (PIO_B_DATA)
-                    AND     I2C_DATA_MASK           ; TODO - No panic code
+                    AND     I2C_DATA_MASK          
+                    LD      HL, PANIC_0005
                     JR      Z, panic
 
                     CALL    i2c_sda_low             ; Set data low
                     IN      A, (PIO_B_DATA)
-                    AND     I2C_DATA_MASK           ; TODO - No panic code
+                    AND     I2C_DATA_MASK                 
+                    LD      HL, PANIC_0006
                     JR      NZ, panic
 
                     CALL    uart_inline

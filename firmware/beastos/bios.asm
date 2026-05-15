@@ -135,7 +135,7 @@ bios_boot     ;  0 Initialize - This is called on first boot when CCP and BIOS h
 _boot_iobyte        LD      (iobyte),A           
 
                     LD      A, (boot_mode)       ; If we need to restore the B drive on boot, patch the CCP command
-                    AND     BOOT_RESTORE_B       ; See CP/M 2.2 Application Node 01 2/20/82 "The CCP Auto-Load Feature"
+                    AND     BOOT_RESTORE_B       ; See CP/M 2.2 Application Note 01 2/20/82 "The CCP Auto-Load Feature"
                     JR      Z, start_cpm
 
                     LD      HL, _restore_command ; Auto-run the RESTORE command
@@ -250,6 +250,7 @@ _coninst_rdr        LD      A, (iobyte)                 ; Input is determined by
 
 ;------------------------------------------------------  
 bios_conin    ;  3 Console input - Wait for input, returning character in A
+              ;  Note this will always enable interrupts to recieve keyboard input
                     LD      A, (iobyte)
                     AND     03h
                     JR      Z, _conin_tty
@@ -610,8 +611,13 @@ _conout_row_postv   LD      A, (console_height)
                     CP      VIDEOBEAST_PAGE
                     JR      NZ, _not_videobeast
 
+                    CALL    get_int_state
+                    PUSH    AF                              ; Store interrupt state
                     DI
+                    LD      A, VIDEOBEAST_PAGE
                     OUT     (IO_MEM_1), A
+                    LD      A, (VB_REGISTERS_LOCKED)
+                    LD      H, A
                     LD      A, VB_UNLOCK
                     LD      (VB_REGISTERS_LOCKED), A
                     LD      A, L
@@ -623,10 +629,14 @@ _conout_row_postv   LD      A, (console_height)
                     JR      C, _conout_scroll_xy
                     XOR     A
 _conout_scroll_xy   LD      (VB_LAYER_4+LAYER_SCROLL_XY), A
-                    LD      (VB_REGISTERS_LOCKED), A    ; Either value will re-lock registers..
+                    LD      A, H
+                    LD      (VB_REGISTERS_LOCKED), A    ; Restore lock status
 
                     LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
+
+                    POP     AF                          ; Parity is Odd (0) if IFF2 is reset 
+                    JP      PO, _not_videobeast         ; i.e. interrupts were disabled before this call
                     EI 
 
 _not_videobeast     LD      A, C
@@ -643,8 +653,12 @@ _conout_update_display
                     JR      Z, _redraw_buffer
                     LD      (display_row), HL           ; Only move display row if we're tracking the cursor
 
-_redraw_buffer      DI
+_redraw_buffer      CALL    get_int_state
+                    PUSH    AF                              ; Store interrupt state
+                    DI
                     CALL    unsafe_redraw
+return_int_state    POP     AF
+                    RET     PO
                     EI
                     RET
 
@@ -677,6 +691,11 @@ unsafe_led_redraw   LD      HL, (display_row)       ; Calculate our screen sourc
 
 _full_redraw        LD      A, (screen_page)
                     OUT     (IO_MEM_1), A
+
+                    LD      A, (VB_REGISTERS_LOCKED)
+                    LD      (_redraw_done+1), A             ; !!! Self modifying code
+                    XOR     A
+                    LD      (VB_REGISTERS_LOCKED), A
 
 _redraw_loop        LD      A, (DE)
                     CP      (HL)
@@ -788,7 +807,9 @@ _redraw_map2        LD      A, DISPLAY_WIDTH-1
                     LD      C, DISP_DEFAULT_BRIGHTNESS
                     CALL    disp_char_bright
 
-_redraw_done        LD      A, (page_1_mapping)
+_redraw_done        LD      A, 0                            ; !!! Self modifying code
+                    LD      (VB_REGISTERS_LOCKED), A
+                    LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
                     RET
 
@@ -838,16 +859,35 @@ _conout_visible     LD      DE, (cursor_row)
                     LD      A, D
                     SLA     A
                     LD      L, A
+
+                    CALL    get_int_state
+                    PUSH    AF
+                    DI
+
                     LD      A, (screen_page)
                     OUT     (IO_MEM_1), A
+
+                    LD      A, (VB_REGISTERS_LOCKED)    ; Always set/restore this byte, even if we're not using videobeast
+                    LD      B, A
+                    XOR     A
+                    LD      (VB_REGISTERS_LOCKED), A
+
                     LD      (HL), C
                     LD      A, (console_colour)
                     INC     HL
                     LD      (HL), A
+
+                    LD      A, B
+                    LD      (VB_REGISTERS_LOCKED), A
+
                     LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
 
-                    LD      DE, (cursor_row)
+                    POP     AF
+                    JP      PO, _conout_int_ok
+                    EI
+
+_conout_int_ok      LD      DE, (cursor_row)
                     LD      A, (console_width)
                     LD      L, A
                     LD      A, D
@@ -863,7 +903,7 @@ _conout_wrap        LD      D, 1
 ;
 ; Fill the row of the screen buffer with space chars..
 ; Enter with A -> row of screen buffer, C -> start column
-;          Uses HL, C
+;          Uses HL, BC
 ;
 clear_screen_row    LD      H, A
                     LD      A, (screen_offset)
@@ -879,8 +919,20 @@ clear_screen_row    LD      H, A
                     LD      A, (console_colour)
                     LD      C, A
 
+                    CALL    get_int_state
+                    PUSH    AF
+                    DI
+
                     LD      A, (screen_page)
                     OUT     (IO_MEM_1), A
+
+                    CP      VIDEOBEAST_PAGE
+                    JR      NZ, _clear_loop
+
+                    LD      A, (VB_REGISTERS_LOCKED)
+                    LD      B, A
+                    XOR     A
+                    LD      (VB_REGISTERS_LOCKED), A
 
 _clear_loop         LD      A, ' '
                     LD      (HL), A
@@ -891,9 +943,18 @@ _clear_loop         LD      A, ' '
                     CP      L
                     JR      NZ, _clear_loop
 
-                    LD      A, (page_1_mapping)
+                    LD      A, (screen_page)
+                    CP      VIDEOBEAST_PAGE
+                    JR      NZ, _dont_restore
+
+                    LD      A, B
+                    LD      (VB_REGISTERS_LOCKED), A
+
+_dont_restore       LD      A, (page_1_mapping)
                     OUT     (IO_MEM_1), A
-                    RET
+                    
+                    JP      return_int_state
+
 ;------------------------------------------------------  
 bios_list     ;  5 List OUTput
                     XOR     A
@@ -953,6 +1014,8 @@ bios_setdma   ; 12 Set DMA ADDress - Set the DMA address to BC - source or desti
 ; Uses Mem Page 1, 2
 ;
 bios_read     ; 13 Read 128 bytes
+                    CALL    get_int_state
+                    PUSH    AF
                     CALL    _get_memdisc_addr
                     DI
                     OUT     (IO_MEM_1), A
@@ -989,8 +1052,10 @@ _read_write_done    LD      A, (page_1_mapping)   ; Return page map to normal
                     OUT     (IO_MEM_1), A
                     LD      A, (page_2_mapping)
                     OUT     (IO_MEM_2), A
+                    POP     AF
+                    JP      PO, _no_interrupts
                     EI
-                    XOR     A               ; No errors
+_no_interrupts      XOR     A               ; No errors
                     RET
                     
 ;------------------------------------------------------  
@@ -1119,6 +1184,26 @@ m_print_a_safe      PUSH    HL
                     POP     BC
                     POP     DE
                     POP     HL
+                    RET
+
+;------------------------------------------------------
+; Get the interrupt enabled/disabled state.
+; This relies on the BIOS interrupt_handler being configured as the fast way to
+; test interrupt status can be fooled if an interrupt occurs at the wrong moment.
+; We detect this rare case by checking the (timer) value.
+;
+; Uses B, A
+;
+; Returns Parity SET flag (PE) if interrupts are enabled
+;
+get_int_state       LD      A, (timer)
+                    LD      B, A
+                    LD      A, I                ; Get interrupt state
+                    RET     PE                  ; Parity set - definitely enabled
+                    LD      A, (timer)          ; Could show as disabled if an interrupt occured during LD A,I
+                    CP      B
+                    RET     Z                   ; No interrupt occured, therefore definitely disabled (P/V flag will be clear ?! TODO: Check!!)
+                    XOR     A                   ; Set parity - interrupts enabled
                     RET
 
 ;------------------------------------------------------  
@@ -1550,6 +1635,15 @@ set_usr_interrupt   LD      A, H
 _return_usr_int     LD      HL, (user_interrupt)
                     RET
 
+;
+; Get the 32 bit timer value in HL (low word) and DE (high word)
+;
+;   Returns the 32 bit timer value - time in 64ths of a second when RTC interrupts are running
+;
+get_timer           LD      HL, (timer+2)
+                    EX      DE, HL
+                    LD      HL, (timer)
+                    RET    
 
 ; =======================================================================================================================
 ; End of core BIOS - hardware specific code  follows
