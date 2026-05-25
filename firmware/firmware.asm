@@ -48,7 +48,7 @@
                     OUT     (IO_MEM_0), A
                     JR      _start
 
-                    .DB     "Firmware 1.8 01/05/26",0,0
+                    .DB     "Firmware 1.8 26/05/26",0,0
 
 _start              LD      SP, 0h                  ; Set SP
 

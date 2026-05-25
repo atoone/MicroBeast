@@ -124,6 +124,7 @@ bios_boot     ;  0 Initialize - This is called on first boot when CCP and BIOS h
                     LD      HL,BIOS_START        ; Why are we doing this?
                     LD      (0FFFEh),HL
                     CALL    configure_hardware
+
                     XOR     A
                     LD      (usrdrv),A
 
