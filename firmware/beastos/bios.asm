@@ -1070,7 +1070,9 @@ bios_write    ; 14 Write 128 bytes
                     INC     A
                     RET
 
-_write_ok           CALL    _get_memdisc_addr
+_write_ok           CALL    get_int_state
+                    PUSH    AF
+                    CALL    _get_memdisc_addr
                     DI
                     OUT     (IO_MEM_1), A
                     SET     6, B

@@ -33,7 +33,7 @@
 ;
                         .ORG    0100h
 
-                        .INCLUDE "beastos/bios.inc"
+                        .INCLUDE "beastos/beastos.inc"
 
 CMD_LEN                 .EQU    00080h
 

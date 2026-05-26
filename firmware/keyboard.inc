@@ -17,11 +17,11 @@ KEY_BACKSPACE   .EQU    08h
 
 ; Modifier and special keys have key codes with the top bit set..
 ;
-KEY_UP          .EQU    128
-KEY_DOWN        .EQU    129
-KEY_LEFT        .EQU    130
+KEY_UP          .EQU    129             ; Note CPM translates these to Escape sequences
+KEY_DOWN        .EQU    130             ; So these values match cursor escape for Up (Esc-A), Down (Esc-B) etc.
 KEY_RIGHT       .EQU    131
-KEY_SHIFT       .EQU    132
+KEY_LEFT        .EQU    132
+KEY_SHIFT       .EQU    133
 KEY_CTRL        .EQU    134
 
 ; 144 = 90h
