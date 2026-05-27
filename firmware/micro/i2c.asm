@@ -193,10 +193,9 @@ _fast_loop          LD      A, H
                     SCF
                     RET     Z               ; Return with carry set if acknowledge bit is low
 
-                    CALL    i2c_stop        ; Stop bus if error
                     SCF
                     CCF
-                    RET                     ; Clear carry if acknowledge is high
+                    JP      i2c_stop        ; Stop bus if error
 
 ; Read byte from i2C into A, without ACK
 ;

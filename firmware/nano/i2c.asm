@@ -141,22 +141,21 @@ ni2c_address_w       SLA     A
 ;
 ; Uses A, B, C, D
 ni2c_write          PUSH    HL
-                    PUSH    DE
                     LD      D, A
                             
                     LD      H, NI2C_REGISTER << 1            ; Start with SDA and SCL LOW
                     LD      B, 8
-                    LD      E, NI2C_CLK_MASK
+                    LD      L, NI2C_CLK_MASK
 
 _fast_loop          LD      A, H
                     SLA     D
                     RR      A
                     OUT     (NIO_B_CTRL), A
 
-                    OR      E
+                    OR      L
                     OUT     (NIO_B_CTRL), A                 ; Clock high
 
-                    XOR     E
+                    XOR     L
                     OUT     (NIO_B_CTRL), A                 ; Clock low
                     DJNZ    _fast_loop
 
@@ -165,12 +164,11 @@ _fast_loop          LD      A, H
                     RR      A                               ; Release SDA
                     OUT     (NIO_B_CTRL), A
 
-                    OR      E
+                    OR      L
                     OUT     (NIO_B_CTRL), A                 ; Clock high
 
 
                     IN      A, (NIO_B_CTRL)                 ; Read ACK
-                    POP     DE
                     POP     HL
                     LD      D, A
 
@@ -180,12 +178,11 @@ _fast_loop          LD      A, H
 
                     BIT     NI2C_DATA_BIT, D     ; D contains acknowledge bit
                     SCF
-                    RET     Z               ; Return with carry set if acknowledge bit is low
+                    RET     Z                   ; Return with carry set if acknowledge bit is low
 
-                    CALL    ni2c_stop        ; Stop bus if error
                     SCF
                     CCF
-                    RET                     ; Clear carry if acknowledge is high
+                    JP      ni2c_stop           ; Stop bus if error (flags are unaffected by stop calls)
 
 ; Read byte from i2C into A, without ACK
 ;
@@ -209,7 +206,7 @@ ni2c_ack            CALL    ni2c_sda_low
 
 ; SCL/SDA toggle routines
 ;
-; All use A
+; All use A, flags unaffected
 
 ni2c_sda_high       LD      A, (nio_i2c_data)
                     SET     NI2C_DATA_BIT, A

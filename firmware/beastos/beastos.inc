@@ -262,3 +262,11 @@ MBB_RESET_HARDWARE      .EQU    0FDC1h
 ; This loads the CCP from the boot sector of the default drive into the correct location. It can be called
 ; when a hard boot is required (ie. call BIOS_BOOT rather than BIOS_WBOOT)
 MBB_LOAD_CCP            .EQU    0FDBEh
+
+
+; CALL MBB_GET_TIMER - Get the 32 bit timer value in HL (low word) and DE (high word)
+; The timer is incremented on each interrupt call, synchronised to the RTC at 64Hz, ie. 64 times a second
+; This should not be relied on for accurate timekeeping as interrupts and interrupt source may change
+; depending on the host system.
+;
+MBB_GET_TIMER           .EQU    0FDBBh

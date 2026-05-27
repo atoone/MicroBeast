@@ -1021,8 +1021,8 @@ bios_read     ; 13 Read 128 bytes
                     DI
                     OUT     (IO_MEM_1), A
                     SET     6, B            ; Point B into page 1
-                    PUSH    BC
-                    POP     HL
+                    LD      H, B
+                    LD      L, C
                     LD      C, 128
 
                     LD      DE, (sys_dmaaddr)

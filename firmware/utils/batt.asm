@@ -105,6 +105,12 @@ _set_pullup             LD      H, FXL_ADDRESS
                         CALL    MBB_I2C_STOP
 
                         ; Now see where we're getting power
+_get_power              CALL    MBB_PRINT
+                        .DB     "\r", 0
+
+                        XOR     A
+                        LD      (is_battery), A
+
                         LD      H, FXL_ADDRESS
                         LD      L, FXL_INPUT_REG
                         CALL    MBB_I2C_RD_ADDRESS
@@ -119,19 +125,22 @@ _set_pullup             LD      H, FXL_ADDRESS
                         JR      NZ, _no_usb_power
 
                         CALL    MBB_PRINT
-                        .DB     "USB     ",0
+                        .DB     "USB ",0
 
 _no_usb_power           LD      A, E
                         AND     JACK_POWER_MASK
                         JR      NZ, _no_jack_power
 
                         CALL    MBB_PRINT
-                        .DB     "Jack    ", 0
+                        .DB     "Ext ", 0
 
 _no_jack_power          LD      A, E
                         AND     USB_POWER_MASK | JACK_POWER_MASK
                         CP      USB_POWER_MASK | JACK_POWER_MASK
                         JR      NZ, do_fuel
+
+                        LD      A, 0FFh
+                        LD      (is_battery), A
 
                         CALL    MBB_PRINT
                         .DB     "Battery ", 0
@@ -149,15 +158,19 @@ do_fuel                 LD      L, FUEL_SOC_REG
                         CALL    byte_to_dec
 
                         CALL    MBB_PRINT
-_percent                .DB     "   %",0
+_percent                .DB     "   %    ",0
 
                         POP     BC
                         CALL    div_five
                         LD      C, A
 
                         ; C is now charge from 0-20
-                        
                         LD      B, 0
+
+                        LD      A, (is_battery)
+                        AND     A
+                        JR      Z, _animate
+                        LD      B, C
 
 _animate                PUSH    BC
                         LD      C, B
@@ -175,11 +188,29 @@ _delay                  DEC     BC
                         CP      C
                         JR      NZ, _animate
 
-_wait_key               LD      E, 0FFh
+                        LD      B, 128
+                        CALL    MBB_GET_TIMER
+                        
+_wait_second            LD      C, L
+                        PUSH    BC
+                        
+                        LD      E, 0FFh
                         LD      C, BDOS_CONIO
                         CALL    BDOS
+                        
+                        POP     BC
+
                         AND     A
-                        JR      Z, _wait_key
+                        JR      NZ, _finish
+
+                        CALL    MBB_GET_TIMER
+                        LD      A, C
+                        CP      L
+                        JR      Z, _wait_second
+
+                        DJNZ    _wait_second
+
+                        JP      _get_power
                         
 _finish                 CALL    MBB_PRINT
                         .DB     "\r\n-------------------------"
@@ -307,6 +338,8 @@ _store                  LD      (HL), A
                         INC     HL
                         LD      A, C             
                         RET
+
+is_battery              .DB     0           ; Non zero if there is a power source
 
 stack_space             .BLOCK  32          ; 16 deep stack..
 old_stack               .DW     0
