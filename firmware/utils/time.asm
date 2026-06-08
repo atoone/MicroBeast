@@ -1,0 +1,212 @@
+;
+; TIME - Display the time
+;
+; Copyright (c) 2026 Andy Toone for Feersum Technology Ltd.
+;
+; Part of the MicroBeast Z80 kit computer project. Support hobby electronics.
+;
+; Permission is hereby granted, free of charge, to any person obtaining a copy
+; of this software and associated documentation files (the "Software"), to deal
+; in the Software without restriction, including without limitation the rights
+; to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+; copies of the Software, and to permit persons to whom the Software is
+; furnished to do so, subject to the following conditions:
+; 
+; The above copyright notice and this permission notice shall be included in all
+; copies or substantial portions of the Software.
+; 
+; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+; IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+; AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+; SOFTWARE.
+;
+
+;
+; Command line: TIME
+
+                    .ORG    0100h
+
+                    .INCLUDE "beastos/beastos.inc"
+
+
+CARRIAGE_RETURN     .EQU  0Dh
+
+_offset_sec         .EQU    0
+_offset_min         .EQU    1
+_offset_hour        .EQU    2
+_offset_wkday       .EQU    3
+_offset_date        .EQU    4
+_offset_month       .EQU    5
+_offset_year        .EQU    6
+
+                    LD      (old_stack), SP
+                    LD      SP, old_stack
+
+display_loop        CALL    rtc_display_time
+                    
+                    AND     A
+                    JR      Z, _restore
+
+                    LD      BC, 040h
+                    CALL    pause_for_ticks
+
+                    CALL    BIOS_CONIST
+                    AND     A
+                    JR      Z, display_loop
+
+                    CALL    BIOS_CONIN
+
+_restore            LD      SP, (old_stack)
+                    RET
+
+
+_get_error          CALL    MBB_I2C_STOP
+                    EI
+
+                    CALL    MBB_PRINT 
+                    .DB     "Error getting time\r\n", 0
+                    XOR     A
+                    RET
+
+rtc_display_time    LD      HL, data_scratch
+                    DI
+                    CALL    MBB_RTC_TIME
+                    JP      NC, _get_error
+                    EI
+
+                    LD      C, CARRIAGE_RETURN
+                    CALL    BIOS_CONOUT
+                    
+                    LD      A, (data_scratch+_offset_wkday)
+                    LD      HL, weekdays
+                    LD      C, A
+
+                    CALL    print_word_c
+                        
+_get_date           CALL    _space
+                    LD      A, (data_scratch+_offset_date)
+                    CALL    _two_chars_space
+
+                    LD      A, (data_scratch+_offset_month)
+                    LD      HL, _months
+                    BIT     4, A
+                    JR      Z, _month_ok
+                    SUB     6
+_month_ok           LD      C,A
+
+                    CALL    print_word_c
+                    CALL    _space
+                    LD      A, 20h
+                    CALL    _two_chars
+
+                    LD      A, (data_scratch+_offset_year)
+                    CALL    _two_chars_space
+
+                    LD      A, (data_scratch+_offset_hour)
+                    CALL    _two_chars_space
+
+                    LD      A, (data_scratch+_offset_min)
+                    CALL    _two_chars_space
+
+                    LD      A, (data_scratch+_offset_sec)
+                    CALL    _two_chars
+
+                    LD      A, 0FFh
+                    RET
+
+_two_chars_space    CALL    _two_chars
+_space              LD      C, ' '
+                    JP      BIOS_CONOUT
+
+_two_chars          LD      C,A
+                    SRL     A
+                    SRL     A
+                    SRL     A
+                    SRL     A
+                    ADD     A, '0'
+                    PUSH    BC
+                    LD      C, A
+                    CALL    BIOS_CONOUT
+                    POP     BC
+                    LD      A,C
+                    AND     0fh
+                    ADD     A, '0'
+                    LD      C, A
+                    JP      BIOS_CONOUT
+;
+; Search table pointed to by HL for the C'th word (1-based)
+; Prints the chosen word to conout
+;
+print_word_c        DEC     C
+                    JR      NZ, _next_char
+                        
+_print_word         LD      A, (HL)
+                    INC     HL
+                    AND     A
+                    RET     Z
+                    LD      C, A
+                    PUSH    HL
+                    CALL    BIOS_CONOUT
+                    POP     HL
+                    JR      _print_word
+
+_next_char          LD      A, (HL)
+                    INC     HL
+                    AND     A
+                    JR      NZ, _next_char
+                    JR      print_word_c
+
+
+weekdays            .DB "Mon",0
+                    .DB "Tue",0
+                    .DB "Wed",0
+                    .DB "Thu",0
+                    .DB "Fri",0
+                    .DB "Sat",0
+                    .DB "Sun",0
+
+_months             .DB "Jan",0
+                    .DB "Feb",0
+                    .DB "Mar",0
+                    .DB "Apr",0
+                    .DB "May",0
+                    .DB "Jun",0
+                    .DB "Jul",0
+                    .DB "Aug",0
+                    .DB "Sep",0
+                    .DB "Oct",0
+                    .DB "Nov",0
+                    .DB "Dec",0
+
+;
+; Pause for BC ticks
+; Uses HL, DE
+;
+pause_for_ticks     CALL    MBB_GET_TIMER
+                    EX      DE, HL              ; DE holds low time word
+_pause_loop         PUSH    DE
+                    PUSH    BC
+                    CALL    BIOS_CONIST
+                    POP     BC
+                    AND     A
+                    JR      NZ, _safe_back
+                    
+                    CALL    MBB_GET_TIMER
+                    POP     DE
+                    SBC     HL, DE
+                    SBC     HL, BC
+                    JR      C, _pause_loop
+                    RET
+
+_safe_back          POP     DE
+                    RET
+
+data_scratch        .FILL  8,0      ; Used for BCD display, and retrieving time
+
+stack_space         .BLOCK  32          ; 16 deep stack..
+old_stack           .DW     0
+
+                    .END
