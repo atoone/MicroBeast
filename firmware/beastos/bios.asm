@@ -187,8 +187,8 @@ _read_ccp           PUSH    BC
                     PUSH    HL
                     LD      C, D                 ; Set the sector to read
                     CALL    bios_setsec
-                    POP     BC
-                    PUSH    BC
+                    LD      B, H
+                    LD      C, L
                     CALL    bios_setdma
                     CALL    bios_read
                     AND     A                    ; Reboot if error 
@@ -210,13 +210,8 @@ _read_ccp           PUSH    BC
                     LD      D, 1                 ; Or, set sector back to 1 and increment track 
                     INC     C
 
-                    PUSH    BC
-                    PUSH    DE
-                    PUSH    HL
                     CALL    bios_settrk
-                    POP     HL
-                    POP     DE
-                    POP     BC
+                    
                     JR      _read_ccp
 
 
@@ -995,12 +990,14 @@ bios_home     ;  8 Home disk
                     LD      C, 0            
 ;------------------------------------------------------  
 bios_settrk   ; 10 Select track - Move drive to track stored in C - 0 based (0-76)
+              ; Only the A register is affected
                     LD      A, C
                     LD      (sys_track), A
                     RET
                     
 ;------------------------------------------------------  
 bios_setsec   ; 11 Select sector - Move drive to sector stored in BC - 1 based (1-26) - TODO: Confirm this, not sure if true..
+              ; No registers are affected by this call.
                     LD      (sys_sector), BC
                     RET
                     
@@ -1076,8 +1073,8 @@ _write_ok           CALL    get_int_state
                     DI
                     OUT     (IO_MEM_1), A
                     SET     6, B
-                    PUSH    BC
-                    POP     DE
+                    LD      D, B
+                    LD      E, C
                     LD      C, 128
 
                     LD      HL, (sys_dmaaddr)
@@ -1619,7 +1616,7 @@ bios_flash_write    CALL    flash_write
                     RET 
 
 ;
-; Set or query the user interrupt. The specified routine will be called after keyboard polling, every 60th of a 
+; Set or query the user interrupt. The specified routine will be called after keyboard polling, every 64th of a 
 ; second. The shadow register set is selected before the call (EXX), and AF is preserved. The routine should 
 ; RETurn normally. Interrupt routines survive warm reboots, but no special measures are taken to ensure the
 ; memory they occupy is preserved.

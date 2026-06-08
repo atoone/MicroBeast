@@ -1,5 +1,5 @@
 ;
-; BATT - Battery monitor utility
+; LED - LED control utility. Controls Zorkulator backlight and LEDs
 ;
 ; Copyright (c) 2026 Andy Toone for Feersum Technology Ltd.
 ;
@@ -25,11 +25,17 @@
 ;
 
 ;
-; Command line: LCD <NN>
+; Command line: LED <a|b|d> <NN>
 ;
-; If no parameter given, allows the backlight to be set with 'u' and 'd'
+; Controls LED output, where
+;   <a|b|d> is an optional parameter to select LED  A (green), B (red) or D (backlight)
+;           If not supplied, the backlight is controlled
+; 
+;   <NN> is an optional percentage brightness, where 0 is off and 100 is full brightness.
 ;
-
+; If no percentage is given, allows the backlight to be set with 'u' and 'd'
+;
+;
 
                     .ORG    0100h
 
@@ -43,7 +49,7 @@ CMD_START           .EQU    00081h
 
                     LD      A, (CMD_LEN)
                     OR      A
-                    JR      Z, _no_params
+                    JR      Z, start_control
 
                     LD      D, 0
 
@@ -56,11 +62,25 @@ _strip_spaces       LD      A, (HL)
 
                     INC     HL                    
                     DJNZ    _strip_spaces
-                    JR      _no_params
+                    JR      start_control
 
-_param_ready        LD      A, B
-                    CP      4
+_param_ready        CP      'a'
+                    JR      C, _param_in_range
+                    CP      'e'
                     JR      NC, _param_error
+
+                    XOR     020h
+_param_in_range     CP      'A'
+                    JR      C, _param_loop
+                    CP      'E'
+                    JR      NC, _param_error
+
+                    SUB     'A'
+                    LD      (led_index), A
+
+                    INC     HL
+                    DJNZ    _strip_spaces
+                    JR      start_control
 
 _param_loop         LD      A, D
                     CP      11
@@ -88,13 +108,15 @@ _param_loop         LD      A, D
 
                     LD      (brightness), A
                     LD      (user_set), A
-                    JR      _no_params
+                    JR      start_control
 
 _param_error        CALL    MBB_PRINT
-                    .DB     "\r\nUsage: LCD <percent>",0
+                    .DB     "\r\nUse LED <A|B|C|D> <pct>",0
                     JP      _restore
 
-_no_params          LD      H, BL_ADDRESS      
+start_control       CALL    read_led_state
+
+                    LD      H, BL_ADDRESS      
                     LD      L, BL_REG_MODE1
                     LD      E, BL_SET_WAKE
 
@@ -106,32 +128,65 @@ write_brightness    LD      A, (brightness)
 
                     LD      H, BL_ADDRESS      
                     LD      L, BL_REG_LEDOUT
-                    LD      E, BL_SET_LED3_FULL
+                    LD      E, BL_SET_LED0_FULL
+                    LD      A, (led_index)
+                    CP      03
+                    JR      Z, _full_ok
+
+                    LD      E, BL_SET_LED0_OFF
+
+_full_ok            CALL    adjust_e
 
                     CALL    write_backlight
                     JR      _display_setting
 
 _set_bright         LD      H, BL_ADDRESS      
                     LD      L, BL_REG_LEDOUT
-                    LD      E, BL_SET_LED3_PWM
+                    LD      E, BL_SET_LED0_PWM
+
+                    CALL    adjust_e
 
                     CALL    write_backlight
                     
                     LD      H, BL_ADDRESS      
-                    LD      L, BL_REG_LED3
+                    LD      A, (led_index)
+                    ADD     A, BL_REG_LED0
+                    LD      L, A
+                    CP      BL_REG_LED3
+
                     LD      A, (brightness)
-                    NEG
                     LD      E, A
 
-                    CALL    write_backlight
+                    JR      NZ, _bright_dbl
+                    NEG
+                    LD      E, A
+                    JR      _bright_ok
 
-_display_setting    LD      A, (brightness)
+_bright_dbl         SLA     E
+
+_bright_ok          CALL    write_backlight
+
+_display_setting    LD     A, (led_index)
+                    CP     3
+                    JR     NZ, _show_letter
+                    
+                    CALL    MBB_PRINT
+                    .DB     "\rLCD  : ", 0
+                    JR      _show_percent
+
+_show_letter        ADD     A, 'A'
+                    LD      (_letter), A
+
+                    CALL    MBB_PRINT
+                    .DB     "\rLED "
+_letter             .DB     "-: ", 0
+
+_show_percent       LD      A, (brightness)
 
                     LD      HL, _percent
                     CALL    byte_to_dec
 
                     CALL    MBB_PRINT
-                    .DB     "\rLCD: "
 _percent            .DB     "   %",0
 
                     LD      A, (brightness)
@@ -177,6 +232,8 @@ _not_escape         LD      C, A
                     JR      _finish
 
 _normal_key         CP      'u'
+                    JR      Z, _increase
+                    CP      129
                     JR      NZ, _not_up
 
 _increase           LD      A, (brightness)
@@ -188,6 +245,8 @@ _write_loop         LD      (brightness), A
                     JP      write_brightness
 
 _not_up             CP      'd'
+                    JR      Z, _decrease
+                    CP      130
                     JR      NZ, _finish
 
 _decrease           LD      A, (brightness)
@@ -212,8 +271,34 @@ write_backlight     CALL    MBB_I2C_WR_ADDRESS
                     JP      MBB_I2C_STOP
 
 _bl_ack_error       CALL    MBB_PRINT
-                    .DB     "\r\nNo LCD found", 0
+                    .DB     "\r\nNo LED found", 0
                     JR      _restore
+
+adjust_e            LD      A, (led_index)
+                    LD      D, 0FCh             ; Our bitmask
+                    JR      _start_shift
+
+_shift_loop         RLC     D
+                    RLC     D
+
+                    SLA     E
+                    SLA     E
+_start_shift        DEC     A
+                    JP      P, _shift_loop
+
+                    LD      A, (led_state)
+                    AND     D
+                    OR      E
+                    LD      E, A
+                    RET
+
+
+read_led_state      LD      H, BL_ADDRESS
+                    LD      L, BL_REG_LEDOUT
+                    CALL    MBB_I2C_RD_ADDRESS
+                    JR      NC, _bl_ack_error
+                    LD      (led_state), A
+                    RET
 
 ;
 ; Writes a three digit decimal number in A to (HL)
@@ -317,6 +402,8 @@ div_five                LD      C,B
 brightness          .DB     50          ; 0 (off) to 100
 escape              .DB     0           ; Escape flag for reading input. Zero for no escape
 user_set            .DB     0FFh        ; Set to ffh if no parameter was supplied
+led_index           .DB     3           ; Default is LCD backlight
+led_state           .DB     0
 
 stack_space         .BLOCK  32          ; 16 deep stack..
 old_stack           .DW     0
