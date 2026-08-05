@@ -35,8 +35,8 @@
 ;
                     .MODULE ni2c_nio
 
-init_ni2c           LD      A, NI2C_DATA_MASK | NI2C_CLK_MASK | NI2C_REGISTER  ; Clock and data both high/floating
-                    OUT     (NIO_B_CTRL), A         ; 
+init_ni2c           LD      A, NIO_I2C_IDLE         ; Clock and data both high/floating
+                    OUT     (NIO_I2C_PORT), A       
                     LD      (nio_i2c_data), A
                     ; Fall through into Bus reset
 
@@ -143,37 +143,37 @@ ni2c_address_w       SLA     A
 ni2c_write          PUSH    HL
                     LD      D, A
                             
-                    LD      H, NI2C_REGISTER << 1            ; Start with SDA and SCL LOW
+                    LD      H, 0                            ; Start with SDA and SCL LOW
                     LD      B, 8
                     LD      L, NI2C_CLK_MASK
 
 _fast_loop          LD      A, H
                     SLA     D
                     RR      A
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_I2C_PORT), A
 
                     OR      L
-                    OUT     (NIO_B_CTRL), A                 ; Clock high
+                    OUT     (NIO_I2C_PORT), A                 ; Clock high
 
                     XOR     L
-                    OUT     (NIO_B_CTRL), A                 ; Clock low
+                    OUT     (NIO_I2C_PORT), A                 ; Clock low
                     DJNZ    _fast_loop
 
                     LD      A, H
                     SCF
                     RR      A                               ; Release SDA
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_I2C_PORT), A
 
                     OR      L
-                    OUT     (NIO_B_CTRL), A                 ; Clock high
+                    OUT     (NIO_I2C_PORT), A                 ; Clock high
 
 
-                    IN      A, (NIO_B_CTRL)                 ; Read ACK
+                    IN      A, (NIO_I2C_PORT)                 ; Read ACK
                     POP     HL
                     LD      D, A
 
-                    LD      A, NI2C_DATA_MASK | NI2C_REGISTER
-                    OUT     (NIO_B_CTRL), A                 ; Clock low, SDA released
+                    LD      A, NI2C_DATA_MASK 
+                    OUT     (NIO_I2C_PORT), A                 ; Clock low, SDA released
                     LD      (nio_i2c_data), A
 
                     BIT     NI2C_DATA_BIT, D     ; D contains acknowledge bit
@@ -188,7 +188,7 @@ _fast_loop          LD      A, H
 ;
 ; Uses A, B, C, D
 ni2c_read           LD      B, 8h
-_loop_r             IN      A, (NIO_B_CTRL)
+_loop_r             IN      A, (NIO_I2C_PORT)
                     RL      A
 _data_high          RL      C
                     CALL    ni2c_scl_cycle
@@ -210,40 +210,40 @@ ni2c_ack            CALL    ni2c_sda_low
 
 ni2c_sda_high       LD      A, (nio_i2c_data)
                     SET     NI2C_DATA_BIT, A
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_I2C_PORT), A
                     LD      (nio_i2c_data), A
                     RET
 
 ni2c_sda_low        LD      A, (nio_i2c_data)
                     RES     NI2C_DATA_BIT, A
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_I2C_PORT), A
                     LD      (nio_i2c_data), A
                     RET
 
 ni2c_scl_low        LD      A, (nio_i2c_data)
                     RES     NI2C_CLK_BIT, A
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_I2C_PORT), A
                     LD      (nio_i2c_data), A
                     RET
 
 ni2c_scl_high       LD      A, (nio_i2c_data)
                     SET     NI2C_CLK_BIT, A
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_I2C_PORT), A
                     LD      (nio_i2c_data), A
                     RET
 
 ni2c_scl_cycle      LD     A, (nio_i2c_data)        ; SCL low then high, return SDA in D, bit 7
                     RES    NI2C_CLK_BIT, A
                     LD     (nio_i2c_data), A
-                    OUT    (NIO_B_CTRL), A
+                    OUT    (NIO_I2C_PORT), A
                     
                     SET    NI2C_CLK_BIT, A
-                    OUT    (NIO_B_CTRL), A
+                    OUT    (NIO_I2C_PORT), A
                     
-                    IN     A, (NIO_B_CTRL)
+                    IN     A, (NIO_I2C_PORT)
                     LD     D, A
                     LD     A, (nio_i2c_data)
-                    OUT    (NIO_B_CTRL), A
+                    OUT    (NIO_I2C_PORT), A
                     RET
 
                     .MODULE main

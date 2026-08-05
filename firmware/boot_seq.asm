@@ -33,12 +33,12 @@ JUMP_TABLE_LENGTH   .EQU  (3*JUMP_TABLE_SIZE)
 ; Nanobeast detect
 ; 
                     LD      A, NIO_TEST_BITS
-                    OUT     (NIO_LCD_LOWER), A
-                    OUT     (NIO_LCD_UPPER), A
-                    IN      A, (NIO_LCD_LOWER)
+                    OUT     (PIO_A_CTRL), A         ; On NanoBeast, these are the LCD translation port lower/upper
+                    OUT     (PIO_B_CTRL), A
+                    IN      A, (PIO_A_CTRL)
                     CP      NIO_VALID_LOWER
                     JR      NZ, _is_microbeast
-                    IN      A, (NIO_LCD_UPPER)
+                    IN      A, (PIO_B_CTRL)
                     CP      NIO_VALID_UPPER
                     JR      NZ, _is_microbeast
 ;
@@ -47,8 +47,8 @@ JUMP_TABLE_LENGTH   .EQU  (3*JUMP_TABLE_SIZE)
                     LD      A, 0FFh                 ; Port A to all inputs
                     OUT     (NIO_A_DIR), A
 
-                    LD      A, NINT_REGISTER        ; Clear the interrupt register
-                    OUT     (NIO_B_CTRL), A
+                    XOR     A                       ; Clear the interrupt register
+                    OUT     (NIO_INT_PORT), A
 
                     LD      D, DEVICE_NANO
 
@@ -89,10 +89,10 @@ _boot_beep          LD     A, D
 ;
 ; NanoBeast beep routine
 ;
-_nano_beep          LD      A, NAUDIO_REGISTER                 
+_nano_beep          XOR     A                 
                     LD      E, 100                  ; 100 cycles = 1/3 of a sec
 _nbeep_loop         XOR     NAUDIO_MASK
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_AUDIO_PORT), A
 
                     LD      C, L
 _nbeep_delay0       LD      B, H
@@ -101,7 +101,7 @@ _nbeep_delay1       DJNZ    _nbeep_delay1            ; 13 * (count-2) + 8
                     JR      NZ, _nbeep_delay0
 
                     XOR     NAUDIO_MASK
-                    OUT     (NIO_B_CTRL), A
+                    OUT     (NIO_AUDIO_PORT), A
 
                     LD      C, L
 _nbeep_delay2       LD      B, H

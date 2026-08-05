@@ -65,12 +65,9 @@ ROM_PAGE_16         .EQU    010h
 
 PAGE_1_START        .EQU    4000h
 
-;=================================== MEMORY PAGING ===================================
-; Common ports for both MicroBeast and NanoBeast
-;
-
-NIO_LCD_LOWER       .EQU  016h      ; Note: This is also decoded by Microbeast PIO A CTRL
-NIO_LCD_UPPER       .EQU  017h      ; Note: This is also decoded by Microbeast PIO B CTRL
+;============================= NANO DISPLAY TRANSLATION ===============================
+NIO_LCD_LOWER       .EQU  012h      ; Note, Microbeast treats this as Port A/B Ctrl registers
+NIO_LCD_UPPER       .EQU  013h
 
 ;====================================== I2C DEVICES ===================================
 
