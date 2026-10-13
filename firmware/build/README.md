@@ -15,7 +15,7 @@ If you are upgrading to version 1.6+, you **must** upgrade both.
 
 To do this, go to `Y-Modem -> Address from file` in the Monitor menu and transfer `firmware_p25.bin` - you should 
 then be able to choose `Update firmware` to write the new version to flash. Then repeat `Y-Modem -> Address from file` and 
-transfer `firmware_p25.bin` - this time select `Write Flash` and enter a page number of `04` to write the boot disk
+transfer `bootdisk_p25.bin` - this time select `Write Flash` and enter a page number of `04` to write the boot disk
 to the correct location in the Flash ROM.
 
 With either option, you should get a `Done` message, and can then reboot MicroBeast
